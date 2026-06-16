@@ -147,8 +147,8 @@ git push -u origin main
 |-------|-------|
 | Runtime | **Python 3.12** (no 3.14) |
 | Root Directory | **vacío** (raíz del repo) |
-| Build Command | `bash install_node.sh && pip install -r backend/requirements.txt && cd frontend && npm ci && npm run build` |
-| Start Command | `cd backend && python seed.py && uvicorn app.main:app --host 0.0.0.0 --port 80` |
+| Build Command | `bash build.sh` |
+| Start Command | `bash start.sh` |
 | Port | `80` |
 
 Variables de entorno (ver también [`backend/.env.example`](backend/.env.example)):
@@ -169,7 +169,7 @@ ALLOWED_ORIGINS=["https://payapp.seenode.app"]
 Tras el primer deploy exitoso, simplificar el Start Command a:
 
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 80
+cd backend && uvicorn app.main:app --host 0.0.0.0 --port 80
 ```
 
 ### Verificación

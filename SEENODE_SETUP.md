@@ -13,30 +13,22 @@ Sigue estos pasos en [cloud.seenode.com](https://cloud.seenode.com) después de 
 
 - [ ] **New** → **Web Service** → conectar repo `payapp`, rama `main`
 - [ ] **Runtime: Python 3.12** (no usar 3.14 — `pydantic-core` no compila aún)
-- [ ] Root Directory: **vacío** (raíz del repo; Seenode ejecuta el build desde ahí)
-- [ ] Build Command (opción A — con script en repo):
+- [ ] Root Directory: **vacío** (raíz del repo)
+- [ ] **Build Command:**
 
 ```bash
-bash install_node.sh && pip install -r backend/requirements.txt && cd frontend && npm ci && npm run build
+bash build.sh
 ```
 
-- [ ] Build Command (opción B — sin archivo, funciona siempre):
+- [ ] **Start Command** (primer deploy):
 
 ```bash
-bash -c 'set -e; apt-get update && apt-get install -y curl && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs && npm install -g npm@latest' && pip install -r backend/requirements.txt && cd frontend && npm ci && npm run build
-```
-
-> En los logs debe aparecer `Checking out commit 4bee019` o más reciente. Si ves `23c30b2`, Seenode usa código viejo: haz **Redeploy** manual o vacía caché de build.
-
-- [ ] Start Command (primer deploy):
-
-```bash
-cd backend && python seed.py && uvicorn app.main:app --host 0.0.0.0 --port 80
+bash start.sh
 ```
 
 - [ ] Port: `80`
 
-> Scripts en la raíz: [`install_node.sh`](install_node.sh) y [`.python-version`](.python-version) (`3.12`).
+> Todo el proceso está en [`build.sh`](build.sh) y [`start.sh`](start.sh). Seenode no acepta comandos largos con comillas en el dashboard.
 
 ## 3. Variables de entorno
 
@@ -68,9 +60,13 @@ python -c "import secrets; print(secrets.token_urlsafe(64))"
 - [ ] Recargar `/login` o `/empleados` sin error 404
 - [ ] Login con `admin` / `Admin123!`
 - [ ] Cambiar contraseña del admin
-- [ ] Simplificar Start Command a: `uvicorn app.main:app --host 0.0.0.0 --port 80`
+- [ ] Simplificar Start Command a: `cd backend && uvicorn app.main:app --host 0.0.0.0 --port 80`
 
 ## 5. Errores frecuentes
+
+### Seenode no guarda el build command
+
+Usa solo `bash build.sh` y `bash start.sh` (scripts en la raíz del repo).
 
 ### `install_node.sh: No such file or directory`
 
