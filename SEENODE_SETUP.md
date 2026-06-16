@@ -17,7 +17,7 @@ Sigue estos pasos en [cloud.seenode.com](https://cloud.seenode.com) después de 
 - [ ] Build Command:
 
 ```bash
-pip install -r requirements.txt && cd ../frontend && npm ci && npm run build
+bash install_node.sh && pip install -r requirements.txt && cd ../frontend && npm ci && npm run build
 ```
 
 - [ ] Start Command (primer deploy):
@@ -28,7 +28,7 @@ python seed.py && uvicorn app.main:app --host 0.0.0.0 --port 80
 
 - [ ] Port: `80`
 
-> El repo incluye [`backend/.python-version`](backend/.python-version) con `3.12` para fijar la versión en el build.
+> El repo incluye [`backend/.python-version`](backend/.python-version) con `3.12` y [`backend/install_node.sh`](backend/install_node.sh) para instalar Node.js en el build.
 
 ## 3. Variables de entorno
 
