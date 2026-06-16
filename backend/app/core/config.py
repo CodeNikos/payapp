@@ -1,7 +1,7 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, NoDecode
 from pydantic import field_validator
 from pathlib import Path
-from typing import List, Any
+from typing import List, Any, Annotated
 import json
 import secrets
 
@@ -57,11 +57,11 @@ class Settings(BaseSettings):
     LOCKOUT_DURATION_MINUTES: int = 15
 
     # CORS / hosts (Seenode: https://payapp.seenode.app o JSON ["https://..."])
-    ALLOWED_ORIGINS: List[str] = [
+    ALLOWED_ORIGINS: Annotated[List[str], NoDecode] = [
         "http://localhost:5173",
         "http://localhost:3000",
     ]
-    ALLOWED_HOSTS: List[str] = ["localhost", "127.0.0.1"]
+    ALLOWED_HOSTS: Annotated[List[str], NoDecode] = ["localhost", "127.0.0.1"]
 
     @field_validator("ALLOWED_ORIGINS", "ALLOWED_HOSTS", mode="before")
     @classmethod
