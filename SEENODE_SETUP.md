@@ -63,8 +63,8 @@ DB_PASSWORD=<password>
 JWT_SECRET_KEY=<generar>
 SECRET_KEY=<generar>
 DEBUG=False
-ALLOWED_HOSTS=["payapp.seenode.app"]
-ALLOWED_ORIGINS=["https://payapp.seenode.app"]
+ALLOWED_HOSTS=payapp.seenode.app
+ALLOWED_ORIGINS=https://payapp.seenode.app
 ```
 
 Generar claves:

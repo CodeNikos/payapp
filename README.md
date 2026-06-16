@@ -162,8 +162,8 @@ DB_PASSWORD=<password>
 JWT_SECRET_KEY=<secrets.token_urlsafe(64)>
 SECRET_KEY=<otro valor distinto>
 DEBUG=False
-ALLOWED_HOSTS=["payapp.seenode.app"]
-ALLOWED_ORIGINS=["https://payapp.seenode.app"]
+ALLOWED_HOSTS=payapp.seenode.app
+ALLOWED_ORIGINS=https://payapp.seenode.app
 ```
 
 Tras el primer deploy exitoso, simplificar el Start Command a:
