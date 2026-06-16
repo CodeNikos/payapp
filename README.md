@@ -147,7 +147,7 @@ git push -u origin main
 |-------|-------|
 | Runtime | **Python 3.12** (no 3.14) |
 | Root Directory | `backend` |
-| Build Command | `pip install -r requirements.txt && cd ../frontend && npm ci && npm run build` |
+| Build Command | `bash install_node.sh && pip install -r requirements.txt && cd ../frontend && npm ci && npm run build` |
 | Start Command | `python seed.py && uvicorn app.main:app --host 0.0.0.0 --port 80` |
 | Port | `80` |
 

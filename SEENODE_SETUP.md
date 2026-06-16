@@ -64,6 +64,10 @@ python -c "import secrets; print(secrets.token_urlsafe(64))"
 
 ## 5. Errores frecuentes
 
+### `npm: not found` o build falla tras `pip install`
+
+El runtime Python no trae Node.js. Usa el build command con `bash install_node.sh` (ver [`backend/install_node.sh`](backend/install_node.sh)).
+
 ### `Failed building wheel for pydantic-core` / Python 3.14
 
 Cambia el runtime a **Python 3.12** en Seenode y redeploya. PyO3 (usado por pydantic) aún no soporta 3.14.
