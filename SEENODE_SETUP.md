@@ -14,11 +14,19 @@ Sigue estos pasos en [cloud.seenode.com](https://cloud.seenode.com) después de 
 - [ ] **New** → **Web Service** → conectar repo `payapp`, rama `main`
 - [ ] **Runtime: Python 3.12** (no usar 3.14 — `pydantic-core` no compila aún)
 - [ ] Root Directory: **vacío** (raíz del repo; Seenode ejecuta el build desde ahí)
-- [ ] Build Command:
+- [ ] Build Command (opción A — con script en repo):
 
 ```bash
 bash install_node.sh && pip install -r backend/requirements.txt && cd frontend && npm ci && npm run build
 ```
+
+- [ ] Build Command (opción B — sin archivo, funciona siempre):
+
+```bash
+bash -c 'set -e; apt-get update && apt-get install -y curl && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs && npm install -g npm@latest' && pip install -r backend/requirements.txt && cd frontend && npm ci && npm run build
+```
+
+> En los logs debe aparecer `Checking out commit 4bee019` o más reciente. Si ves `23c30b2`, Seenode usa código viejo: haz **Redeploy** manual o vacía caché de build.
 
 - [ ] Start Command (primer deploy):
 
@@ -66,7 +74,11 @@ python -c "import secrets; print(secrets.token_urlsafe(64))"
 
 ### `install_node.sh: No such file or directory`
 
-Deja **Root Directory vacío** y usa rutas desde la raíz del repo (`bash install_node.sh`, `backend/requirements.txt`, `frontend/`).
+1. En los logs, revisa `Checking out commit …`. Debe ser **`4bee019` o posterior** (no `23c30b2`).
+2. Haz **Redeploy** manual en Seenode para tomar el último `main` de GitHub.
+3. O usa la **opción B** del build command (instala Node inline, sin script).
+
+Deja **Root Directory vacío** y usa rutas desde la raíz del repo (`backend/requirements.txt`, `frontend/`).
 
 ### `npm: not found` o build falla tras `pip install`
 
