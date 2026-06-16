@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+echo "=== Python version ==="
+python3 --version
+
 echo "=== Installing Node.js ==="
 apt-get update && apt-get install -y curl
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
@@ -11,6 +14,7 @@ node --version
 npm --version
 
 echo "=== Installing Python dependencies ==="
+pip install --upgrade pip
 pip install -r backend/requirements.txt
 
 echo "=== Building frontend ==="

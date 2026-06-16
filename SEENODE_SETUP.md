@@ -102,4 +102,4 @@ El runtime Python no trae Node.js. Usa el build command con `bash install_node.s
 
 ### `Failed building wheel for pydantic-core` / Python 3.14
 
-Cambia el runtime a **Python 3.12** en Seenode y redeploya. PyO3 (usado por pydantic) aún no soporta 3.14.
+Seenode puede usar Python 3.14. El repo fija `pydantic-core>=2.41.5` (wheels cp314). Si falla igual, cambia Runtime a **Python 3.12** en el dashboard.
