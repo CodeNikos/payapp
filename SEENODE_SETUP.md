@@ -12,6 +12,7 @@ Sigue estos pasos en [cloud.seenode.com](https://cloud.seenode.com) después de 
 ## 2. Web Service
 
 - [ ] **New** → **Web Service** → conectar repo `payapp`, rama `main`
+- [ ] **Runtime: Python 3.12** (no usar 3.14 — `pydantic-core` no compila aún)
 - [ ] Root Directory: `backend`
 - [ ] Build Command:
 
@@ -22,10 +23,12 @@ pip install -r requirements.txt && cd ../frontend && npm ci && npm run build
 - [ ] Start Command (primer deploy):
 
 ```bash
-python seed.py && uvicorn app.main:app --host 0.0.0.0 --port 8000
+python seed.py && uvicorn app.main:app --host 0.0.0.0 --port 80
 ```
 
-- [ ] Port: `8000`
+- [ ] Port: `80`
+
+> El repo incluye [`backend/.python-version`](backend/.python-version) con `3.12` para fijar la versión en el build.
 
 ## 3. Variables de entorno
 
@@ -40,8 +43,8 @@ DB_PASSWORD=<password>
 JWT_SECRET_KEY=<generar>
 SECRET_KEY=<generar>
 DEBUG=False
-ALLOWED_HOSTS=["<tu-servicio.seenode.com>"]
-ALLOWED_ORIGINS=["https://<tu-servicio.seenode.com>"]
+ALLOWED_HOSTS=["payapp.seenode.app"]
+ALLOWED_ORIGINS=["https://payapp.seenode.app"]
 ```
 
 Generar claves:
@@ -52,9 +55,15 @@ python -c "import secrets; print(secrets.token_urlsafe(64))"
 
 ## 4. Verificación
 
-- [ ] `https://<tu-servicio.seenode.com>/api/health` → `{"status":"ok","app":"PayApp"}`
+- [ ] `https://payapp.seenode.app/api/health` → `{"status":"ok","app":"PayApp"}`
 - [ ] URL raíz muestra login
 - [ ] Recargar `/login` o `/empleados` sin error 404
 - [ ] Login con `admin` / `Admin123!`
 - [ ] Cambiar contraseña del admin
-- [ ] Simplificar Start Command a: `uvicorn app.main:app --host 0.0.0.0 --port 8000`
+- [ ] Simplificar Start Command a: `uvicorn app.main:app --host 0.0.0.0 --port 80`
+
+## 5. Errores frecuentes
+
+### `Failed building wheel for pydantic-core` / Python 3.14
+
+Cambia el runtime a **Python 3.12** en Seenode y redeploya. PyO3 (usado por pydantic) aún no soporta 3.14.
