@@ -146,9 +146,9 @@ git push -u origin main
 | Campo | Valor |
 |-------|-------|
 | Runtime | **Python 3.12** (no 3.14) |
-| Root Directory | `backend` |
-| Build Command | `bash install_node.sh && pip install -r requirements.txt && cd ../frontend && npm ci && npm run build` |
-| Start Command | `python seed.py && uvicorn app.main:app --host 0.0.0.0 --port 80` |
+| Root Directory | **vacío** (raíz del repo) |
+| Build Command | `bash install_node.sh && pip install -r backend/requirements.txt && cd frontend && npm ci && npm run build` |
+| Start Command | `cd backend && python seed.py && uvicorn app.main:app --host 0.0.0.0 --port 80` |
 | Port | `80` |
 
 Variables de entorno (ver también [`backend/.env.example`](backend/.env.example)):

@@ -13,22 +13,22 @@ Sigue estos pasos en [cloud.seenode.com](https://cloud.seenode.com) después de 
 
 - [ ] **New** → **Web Service** → conectar repo `payapp`, rama `main`
 - [ ] **Runtime: Python 3.12** (no usar 3.14 — `pydantic-core` no compila aún)
-- [ ] Root Directory: `backend`
+- [ ] Root Directory: **vacío** (raíz del repo; Seenode ejecuta el build desde ahí)
 - [ ] Build Command:
 
 ```bash
-bash install_node.sh && pip install -r requirements.txt && cd ../frontend && npm ci && npm run build
+bash install_node.sh && pip install -r backend/requirements.txt && cd frontend && npm ci && npm run build
 ```
 
 - [ ] Start Command (primer deploy):
 
 ```bash
-python seed.py && uvicorn app.main:app --host 0.0.0.0 --port 80
+cd backend && python seed.py && uvicorn app.main:app --host 0.0.0.0 --port 80
 ```
 
 - [ ] Port: `80`
 
-> El repo incluye [`backend/.python-version`](backend/.python-version) con `3.12` y [`backend/install_node.sh`](backend/install_node.sh) para instalar Node.js en el build.
+> Scripts en la raíz: [`install_node.sh`](install_node.sh) y [`.python-version`](.python-version) (`3.12`).
 
 ## 3. Variables de entorno
 
@@ -63,6 +63,10 @@ python -c "import secrets; print(secrets.token_urlsafe(64))"
 - [ ] Simplificar Start Command a: `uvicorn app.main:app --host 0.0.0.0 --port 80`
 
 ## 5. Errores frecuentes
+
+### `install_node.sh: No such file or directory`
+
+Deja **Root Directory vacío** y usa rutas desde la raíz del repo (`bash install_node.sh`, `backend/requirements.txt`, `frontend/`).
 
 ### `npm: not found` o build falla tras `pip install`
 
