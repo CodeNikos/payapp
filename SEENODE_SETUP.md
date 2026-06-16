@@ -14,21 +14,41 @@ Sigue estos pasos en [cloud.seenode.com](https://cloud.seenode.com) después de 
 - [ ] **New** → **Web Service** → conectar repo `payapp`, rama `main`
 - [ ] **Runtime: Python 3.12** (no usar 3.14 — `pydantic-core` no compila aún)
 - [ ] Root Directory: **vacío** (raíz del repo)
-- [ ] **Build Command:**
-
-```bash
-bash build.sh
-```
-
-- [ ] **Start Command** (primer deploy):
-
-```bash
-bash start.sh
-```
-
+- [ ] **Build Command:** `bash build.sh`
+- [ ] **Start Command:** `bash start.sh`
 - [ ] Port: `80`
 
-> Todo el proceso está en [`build.sh`](build.sh) y [`start.sh`](start.sh). Seenode no acepta comandos largos con comillas en el dashboard.
+> Todo el proceso está en [`build.sh`](build.sh) y [`start.sh`](start.sh).
+
+### Seenode clona un commit viejo (`23c30b2`)
+
+Si en los logs siempre aparece `Checking out commit 23c30b2…`, Seenode **no está tomando el último `main`**. Solución:
+
+1. **GitHub Actions** (recomendado): configura los secrets y deja que el workflow despliegue el SHA correcto.
+2. **O** desconecta y vuelve a conectar el repo en Seenode.
+3. **O** crea un **nuevo Web Service** desde cero.
+
+#### Configurar GitHub Actions
+
+En GitHub → repo `payapp` → **Settings** → **Secrets and variables** → **Actions**:
+
+| Secret | Valor |
+|--------|-------|
+| `SEENODE_API_TOKEN` | Token en [Seenode → User API](https://cloud.seenode.com) |
+| `SEENODE_APPLICATION_ID` | ID de la app (en la URL del dashboard o Settings) |
+
+El workflow [`.github/workflows/seenode-deploy.yml`](.github/workflows/seenode-deploy.yml) se ejecuta en cada push a `main`.
+
+**Primer deploy manual** (sin esperar push), en PowerShell:
+
+```powershell
+$TOKEN = "tu-api-token"
+$APP_ID = "tu-application-id"
+$SHA = "5e571162f41cf770858a50a0bbda2677c72a5a64"
+curl.exe -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "{`"gitCommitSha`": `"$SHA`"}" "https://api.seenode.com/v1/applications/$APP_ID/deployments"
+```
+
+En los logs del nuevo deploy debe aparecer `Checking out commit 5e57116…` (o más reciente).
 
 ## 3. Variables de entorno
 
