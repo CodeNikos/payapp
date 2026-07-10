@@ -19,6 +19,8 @@ class EmployeeBase(BaseModel):
     is_trusted_staff: bool = False
     hire_date: date
     contract_type: ContractType = ContractType.indefinido
+    termination_date: Optional[date] = None
+    vacation_opening_balance: Decimal = Field(default=Decimal("0"), ge=0)
 
 
 class EmployeeCreate(EmployeeBase):
@@ -40,6 +42,8 @@ class EmployeeUpdate(BaseModel):
     hire_date: Optional[date] = None
     contract_type: Optional[ContractType] = None
     status: Optional[EmployeeStatus] = None
+    termination_date: Optional[date] = None
+    vacation_opening_balance: Optional[Decimal] = Field(default=None, ge=0)
 
 
 class EmployeeResponse(EmployeeBase):
@@ -47,6 +51,7 @@ class EmployeeResponse(EmployeeBase):
     employee_code: str
     status: EmployeeStatus
     is_active: bool
+    vacation_opening_balance_date: Optional[date] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

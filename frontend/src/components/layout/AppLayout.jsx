@@ -7,7 +7,7 @@ import {
 import {
   DashboardOutlined, PeopleOutlined, ReceiptLongOutlined,
   PersonOutlined, Menu as MenuIcon, LogoutOutlined,
-  LockOutlined, ChevronLeft, EventOutlined, ScheduleOutlined,
+  LockOutlined, ChevronLeft, EventOutlined, ScheduleOutlined, AssessmentOutlined,
 } from '@mui/icons-material'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import { useAuthStore } from '../../context/authStore'
@@ -22,6 +22,7 @@ const navItems = [
   { label: 'Empleados',  icon: <PeopleOutlined />,        path: '/employees' },
   { label: 'Nóminas',    icon: <ReceiptLongOutlined />,   path: '/payroll' },
   { label: 'Marcación',  icon: <ScheduleOutlined />,      path: '/timesheets' },
+  { label: 'Reportería', icon: <AssessmentOutlined />,    path: '/reports' },
   { label: 'Días feriados', icon: <EventOutlined />,      path: '/holidays', adminOnly: true },
   { label: 'Usuarios',   icon: <PersonOutlined />,        path: '/users', adminOnly: true },
 ]

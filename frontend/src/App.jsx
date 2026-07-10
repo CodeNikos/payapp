@@ -8,6 +8,7 @@ import PayrollPage from './pages/PayrollPage'
 import UsersPage from './pages/UsersPage'
 import HolidaysPage from './pages/HolidaysPage'
 import TimesheetsPage from './pages/TimesheetsPage'
+import ReportsPage from './pages/ReportsPage'
 import AppLayout from './components/layout/AppLayout'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 
@@ -24,6 +25,7 @@ export default function App() {
             <Route path="employees" element={<EmployeesPage />} />
             <Route path="payroll" element={<PayrollPage />} />
             <Route path="timesheets" element={<TimesheetsPage />} />
+            <Route path="reports" element={<ReportsPage />} />
             <Route path="users" element={
               <ProtectedRoute adminOnly><UsersPage /></ProtectedRoute>
             } />

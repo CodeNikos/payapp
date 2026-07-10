@@ -1,15 +1,16 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, Fragment } from 'react'
 import {
   Box, Typography, Button, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, Chip, CircularProgress,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  Grid, Tooltip, IconButton, Checkbox, InputAdornment,
+  Grid, Tooltip, IconButton, Checkbox, InputAdornment, Collapse, MenuItem,
 } from '@mui/material'
 import AppAlert from '../components/common/AppAlert'
 import {
   AddOutlined, CheckCircleOutlined, ReceiptLongOutlined,
   BusinessOutlined, GroupsOutlined, SearchOutlined,
   DeleteOutlined, CancelOutlined,
+  KeyboardArrowDownOutlined, KeyboardArrowRightOutlined,
 } from '@mui/icons-material'
 import { alpha } from '@mui/material/styles'
 import { payrollApi, employeesApi, getApiError } from '../services/api'
@@ -30,6 +31,23 @@ const statusLabel = {
   anulado: 'Rechazada',
 }
 
+const PAYROLL_TYPES = [
+  { value: 'regular', label: 'Nómina regular' },
+  { value: 'decimo', label: 'Décimo tercer mes' },
+]
+
+const CUATRIMESTRE_OPTIONS = [
+  { value: 1, label: '1.ª cuota — Dic a Mar (pago 15 abr)' },
+  { value: 2, label: '2.ª cuota — Abr a Jul (pago 15 ago)' },
+  { value: 3, label: '3.ª cuota — Ago a Nov (pago 15 dic)' },
+]
+
+function getSuggestedPaymentDate(year, cuatrimestre) {
+  const paymentMonths = { 1: 4, 2: 8, 3: 12 }
+  const month = paymentMonths[cuatrimestre]
+  return `${year}-${String(month).padStart(2, '0')}-15`
+}
+
 const SCOPE_OPTIONS = [
   {
     value: 'company',
@@ -46,10 +64,15 @@ const SCOPE_OPTIONS = [
 ]
 
 const emptyForm = {
+  payroll_type: 'regular',
   period_start: '',
   period_end: '',
+  cuatrimestre_year: String(new Date().getFullYear()),
+  cuatrimestre: '1',
+  payment_date: getSuggestedPaymentDate(new Date().getFullYear(), 1),
   overtime_hours: '0',
   bonuses: '0',
+  commissions: '0',
   other_deductions: '0',
   notes: '',
 }
@@ -135,6 +158,164 @@ function ScopeOptionCard({ option, selected, onSelect }) {
   )
 }
 
+function DeductionBreakdown({ payroll, fmt }) {
+  const other = parseFloat(payroll.other_deductions) || 0
+  const legalTotal = parseFloat(payroll.total_deductions) || 0
+  const grandTotal = legalTotal + other
+  const isDecimo = payroll.payroll_type === 'decimo'
+
+  const rows = [
+    { label: 'Seguro Social', rate: '9.75%', value: payroll.social_security },
+    { label: 'Seguro educativo', rate: '1.25%', value: payroll.educational_insurance ?? 0 },
+    { label: 'Impuesto sobre la renta (ISR)', rate: null, value: payroll.income_tax },
+  ]
+
+  const earningsRows = isDecimo ? [
+    { label: 'Salario base acumulado', value: payroll.base_salary },
+    { label: 'Horas extra acumuladas', value: payroll.overtime_amount },
+    { label: 'Bonificaciones acumuladas', value: payroll.bonuses },
+    { label: 'Comisiones acumuladas', value: payroll.commissions },
+    { label: 'Total devengado del cuatrimestre', value: payroll.decimo_accrued_total, highlight: true },
+    { label: 'Monto décimo (÷ 12)', value: payroll.gross_salary, highlight: true },
+  ] : [
+    { label: 'Salario base', value: payroll.base_salary },
+    { label: 'Horas extra', value: payroll.overtime_amount },
+    { label: 'Bonificaciones', value: payroll.bonuses },
+    { label: 'Comisiones', value: payroll.commissions },
+    { label: 'Salario bruto', value: payroll.gross_salary, highlight: true },
+  ]
+
+  return (
+    <Box sx={{
+      py: 2,
+      px: 2.5,
+      bgcolor: alpha(COLORS.error, 0.04),
+      borderTop: `1px solid ${COLORS.borderSubtle}`,
+    }}>
+      <Typography sx={{
+        fontFamily: '"DM Mono", monospace',
+        fontSize: '0.68rem',
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
+        color: COLORS.textMuted,
+        mb: 1.5,
+      }}>
+        {isDecimo ? 'Desglose del décimo' : 'Desglose de ingresos'}
+      </Typography>
+
+      <Box sx={{ mb: 2 }}>
+        {earningsRows.map(row => (
+          <Box
+            key={row.label}
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              py: 0.75,
+              borderBottom: `1px dashed ${alpha(COLORS.borderSubtle, 0.8)}`,
+            }}
+          >
+            <Typography sx={{ fontSize: '0.8125rem', color: row.highlight ? COLORS.textPrimary : COLORS.textSecondary, fontWeight: row.highlight ? 600 : 400 }}>
+              {row.label}
+            </Typography>
+            <Typography sx={{ fontFamily: '"DM Mono", monospace', fontSize: '0.8125rem', color: COLORS.brand, fontWeight: row.highlight ? 700 : 600 }}>
+              {fmt(row.value)}
+            </Typography>
+          </Box>
+        ))}
+      </Box>
+
+      <Typography sx={{
+        fontFamily: '"DM Mono", monospace',
+        fontSize: '0.68rem',
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
+        color: COLORS.textMuted,
+        mb: 1.5,
+      }}>
+        Desglose de deducciones
+      </Typography>
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
+        <Box>
+          {rows.map(row => (
+            <Box
+              key={row.label}
+              sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                py: 0.75,
+                borderBottom: `1px dashed ${alpha(COLORS.borderSubtle, 0.8)}`,
+                '&:last-of-type': { borderBottom: other > 0 ? `1px dashed ${alpha(COLORS.borderSubtle, 0.8)}` : 'none' },
+              }}
+            >
+              <Typography sx={{ fontSize: '0.8125rem', color: COLORS.textSecondary }}>
+                {row.label}
+                {row.rate && (
+                  <Typography component="span" sx={{ ml: 0.75, fontSize: '0.72rem', color: COLORS.textMuted }}>
+                    ({row.rate})
+                  </Typography>
+                )}
+              </Typography>
+              <Typography sx={{ fontFamily: '"DM Mono", monospace', fontSize: '0.8125rem', color: COLORS.error, fontWeight: 600 }}>
+                {fmt(row.value)}
+              </Typography>
+            </Box>
+          ))}
+          {other > 0 && (
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.75 }}>
+              <Typography sx={{ fontSize: '0.8125rem', color: COLORS.textSecondary }}>
+                Otras deducciones
+              </Typography>
+              <Typography sx={{ fontFamily: '"DM Mono", monospace', fontSize: '0.8125rem', color: COLORS.error, fontWeight: 600 }}>
+                {fmt(other)}
+              </Typography>
+            </Box>
+          )}
+        </Box>
+
+        <Box sx={{
+          p: 1.5,
+          borderRadius: 2,
+          bgcolor: COLORS.cardBg,
+          border: `1px solid ${COLORS.borderSubtle}`,
+          alignSelf: { sm: 'start' },
+        }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+            <Typography sx={{ fontSize: '0.78rem', color: COLORS.textSecondary }}>Deducciones legales</Typography>
+            <Typography sx={{ fontFamily: '"DM Mono", monospace', fontSize: '0.78rem', color: COLORS.error }}>{fmt(legalTotal)}</Typography>
+          </Box>
+          {other > 0 && (
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+              <Typography sx={{ fontSize: '0.78rem', color: COLORS.textSecondary }}>Otras deducciones</Typography>
+              <Typography sx={{ fontFamily: '"DM Mono", monospace', fontSize: '0.78rem', color: COLORS.error }}>{fmt(other)}</Typography>
+            </Box>
+          )}
+          <Box sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            pt: 1,
+            mt: 0.5,
+            borderTop: `1px solid ${COLORS.borderSubtle}`,
+          }}>
+            <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: COLORS.textPrimary }}>Total retenido</Typography>
+            <Typography sx={{ fontFamily: '"DM Mono", monospace', fontSize: '0.9rem', fontWeight: 700, color: COLORS.error }}>
+              {fmt(grandTotal)}
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1.25 }}>
+            <Typography sx={{ fontSize: '0.78rem', color: COLORS.textSecondary }}>Salario neto</Typography>
+            <Typography sx={{ fontFamily: '"DM Mono", monospace', fontSize: '0.85rem', fontWeight: 700, color: COLORS.success }}>
+              {fmt(payroll.net_salary)}
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
+    </Box>
+  )
+}
+
 export default function PayrollPage() {
   const { user } = useAuthStore()
   const [payrolls, setPayrolls]         = useState([])
@@ -155,6 +336,11 @@ export default function PayrollPage() {
   const [selectedIds, setSelectedIds]   = useState([])
   const [employeeSearch, setEmployeeSearch] = useState('')
   const [form, setForm]                 = useState(emptyForm)
+  const [expandedId, setExpandedId]     = useState(null)
+  const [decimoPreview, setDecimoPreview] = useState(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+
+  const isDecimoMode = form.payroll_type === 'decimo'
 
   const activeEmployees = useMemo(
     () => employees.filter(e => e.is_active && e.status === 'activo'),
@@ -170,7 +356,9 @@ export default function PayrollPage() {
     })
   }, [activeEmployees, employeeSearch])
 
-  const targetCount = scopeMode === 'company' ? activeEmployees.length : selectedIds.length
+  const targetCount = isDecimoMode && decimoPreview?.items?.length
+    ? (scopeMode === 'company' ? decimoPreview.items.length : selectedIds.filter(id => decimoPreview.items.some(i => i.employee_id === id)).length)
+    : (scopeMode === 'company' ? activeEmployees.length : selectedIds.length)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -190,6 +378,7 @@ export default function PayrollPage() {
     setScopeMode('company')
     setSelectedIds([])
     setEmployeeSearch('')
+    setDecimoPreview(null)
     setForm(emptyForm)
     setOpenForm(true)
   }
@@ -215,22 +404,90 @@ export default function PayrollPage() {
     }
   }
 
-  const handleCreate = async () => {
+  const handlePreviewDecimo = async () => {
+    const year = parseInt(form.cuatrimestre_year, 10)
+    const cuatrimestre = parseInt(form.cuatrimestre, 10)
+    if (!year || !cuatrimestre) {
+      setError('Indica el año y cuatrimestre')
+      return
+    }
+
     const targetIds = scopeMode === 'company'
       ? activeEmployees.map(e => e.id)
       : selectedIds
 
-    if (!form.period_start || !form.period_end) {
-      setError('Indica el período de la nómina')
-      return
+    setPreviewLoading(true)
+    setError('')
+    try {
+      const res = await payrollApi.previewDecimo({
+        year,
+        cuatrimestre,
+        employee_ids: scopeMode === 'selected' ? targetIds : undefined,
+      })
+      setDecimoPreview(res.data)
+      if (!form.payment_date) {
+        field('payment_date', res.data.suggested_payment_date)
+      }
+    } catch (e) {
+      setError(getApiError(e, 'Error al calcular vista previa'))
+      setDecimoPreview(null)
+    } finally {
+      setPreviewLoading(false)
     }
-    if (form.period_end < form.period_start) {
-      setError('La fecha de fin debe ser posterior al inicio del período')
-      return
+  }
+
+  const handleCreate = async () => {
+    let decimoItems = decimoPreview?.items
+
+    if (isDecimoMode) {
+      const year = parseInt(form.cuatrimestre_year, 10)
+      const cuatrimestre = parseInt(form.cuatrimestre, 10)
+      if (!year || !cuatrimestre) {
+        setError('Indica el año y cuatrimestre')
+        return
+      }
+      if (!form.payment_date) {
+        setError('Indica la fecha de pago del décimo')
+        return
+      }
+      if (!decimoItems?.length) {
+        try {
+          const res = await payrollApi.previewDecimo({
+            year,
+            cuatrimestre,
+            employee_ids: scopeMode === 'selected' ? selectedIds : undefined,
+          })
+          decimoItems = res.data.items
+          setDecimoPreview(res.data)
+        } catch (e) {
+          setError(getApiError(e, 'Error al calcular el décimo'))
+          return
+        }
+      }
     }
+
+    const targetIds = isDecimoMode
+      ? (scopeMode === 'company'
+        ? decimoItems.map(i => i.employee_id)
+        : selectedIds.filter(id => decimoItems.some(i => i.employee_id === id)))
+      : (scopeMode === 'company'
+        ? activeEmployees.map(e => e.id)
+        : selectedIds)
+
+    if (!isDecimoMode) {
+      if (!form.period_start || !form.period_end) {
+        setError('Indica el período de la nómina')
+        return
+      }
+      if (form.period_end < form.period_start) {
+        setError('La fecha de fin debe ser posterior al inicio del período')
+        return
+      }
+    }
+
     if (targetIds.length === 0) {
       setError(scopeMode === 'company'
-        ? 'No hay empleados activos para generar nómina'
+        ? (isDecimoMode ? 'No hay empleados con décimo calculable en este cuatrimestre' : 'No hay empleados activos para generar nómina')
         : 'Selecciona al menos un empleado')
       return
     }
@@ -240,15 +497,6 @@ export default function PayrollPage() {
     setSuccessMsg('')
     setSaveProgress({ current: 0, total: targetIds.length })
 
-    const basePayload = {
-      period_start: form.period_start,
-      period_end: form.period_end,
-      overtime_hours: parseFloat(form.overtime_hours) || 0,
-      bonuses: parseFloat(form.bonuses) || 0,
-      other_deductions: parseFloat(form.other_deductions) || 0,
-      notes: form.notes || undefined,
-    }
-
     const failures = []
     let created = 0
 
@@ -256,7 +504,28 @@ export default function PayrollPage() {
       const employee_id = targetIds[i]
       setSaveProgress({ current: i + 1, total: targetIds.length })
       try {
-        await payrollApi.create({ ...basePayload, employee_id })
+        const payload = isDecimoMode
+          ? {
+              employee_id,
+              payroll_type: 'decimo',
+              cuatrimestre_year: parseInt(form.cuatrimestre_year, 10),
+              cuatrimestre: parseInt(form.cuatrimestre, 10),
+              payment_date: form.payment_date,
+              other_deductions: parseFloat(form.other_deductions) || 0,
+              notes: form.notes || undefined,
+            }
+          : {
+              employee_id,
+              payroll_type: 'regular',
+              period_start: form.period_start,
+              period_end: form.period_end,
+              overtime_hours: parseFloat(form.overtime_hours) || 0,
+              bonuses: parseFloat(form.bonuses) || 0,
+              commissions: parseFloat(form.commissions) || 0,
+              other_deductions: parseFloat(form.other_deductions) || 0,
+              notes: form.notes || undefined,
+            }
+        await payrollApi.create(payload)
         created++
       } catch (e) {
         const emp = activeEmployees.find(x => x.id === employee_id)
@@ -278,7 +547,12 @@ export default function PayrollPage() {
       setOpenForm(false)
       setForm(emptyForm)
       setSelectedIds([])
-      setSuccessMsg(`Nómina generada para ${created} empleado${created !== 1 ? 's' : ''}`)
+      setDecimoPreview(null)
+      setSuccessMsg(
+        isDecimoMode
+          ? `Décimo generado para ${created} empleado${created !== 1 ? 's' : ''}`
+          : `Nómina generada para ${created} empleado${created !== 1 ? 's' : ''}`,
+      )
       return
     }
 
@@ -361,16 +635,33 @@ export default function PayrollPage() {
 
   const fmt = (v) => `$${parseFloat(v).toLocaleString('es-PA', { minimumFractionDigits: 2 })}`
   const fmtHourly = (v) => v == null ? '—' : `$${v.toLocaleString('es-PA', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
-  const field = (key, value) => setForm(prev => ({ ...prev, [key]: value }))
+  const field = (key, value) => {
+    setForm(prev => {
+      const next = { ...prev, [key]: value }
+      if (key === 'payroll_type') setDecimoPreview(null)
+      if (key === 'cuatrimestre' || key === 'cuatrimestre_year') {
+        const year = parseInt(key === 'cuatrimestre_year' ? value : next.cuatrimestre_year, 10)
+        const q = parseInt(key === 'cuatrimestre' ? value : next.cuatrimestre, 10)
+        if (year && q) next.payment_date = getSuggestedPaymentDate(year, q)
+        setDecimoPreview(null)
+      }
+      return next
+    })
+  }
+  const toggleExpand = (id) => setExpandedId(prev => (prev === id ? null : id))
 
-  const canSubmit = form.period_start && form.period_end && targetCount > 0
+  const canSubmit = isDecimoMode
+    ? form.cuatrimestre_year && form.cuatrimestre && form.payment_date && targetCount > 0
+    : form.period_start && form.period_end && targetCount > 0
 
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 4 }}>
         <Box>
           <Typography variant="h4" sx={{ color: COLORS.textPrimary, mb: 0.5 }}>Nóminas</Typography>
-          <Typography variant="body2" sx={{ color: COLORS.textSecondary }}>{payrolls.length} registros</Typography>
+          <Typography variant="body2" sx={{ color: COLORS.textSecondary }}>
+            {payrolls.length} registros · clic en una fila para ver el desglose de deducciones
+          </Typography>
         </Box>
         <Button variant="contained" startIcon={<AddOutlined />} onClick={handleOpenForm} size="small">
           Generar nómina
@@ -393,7 +684,7 @@ export default function PayrollPage() {
         <Table size="small">
           <TableHead>
             <TableRow>
-              {['ID', 'Empleado', 'Período', '$/h ordin.', 'Salario Bruto', 'Deducciones', 'Salario Neto', 'Estado', 'Acciones'].map(h => (
+              {['ID', 'Tipo', 'Empleado', 'Período', '$/h ordin.', 'Salario Bruto', 'Deducciones', 'Salario Neto', 'Estado', 'Acciones'].map(h => (
                 <TableCell key={h}>{h}</TableCell>
               ))}
             </TableRow>
@@ -401,13 +692,13 @@ export default function PayrollPage() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={9} sx={{ textAlign: 'center', py: 4 }}>
+                <TableCell colSpan={10} sx={{ textAlign: 'center', py: 4 }}>
                   <CircularProgress size={24} sx={{ color: COLORS.accent }} />
                 </TableCell>
               </TableRow>
             ) : payrolls.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} sx={{ textAlign: 'center', py: 6 }}>
+                <TableCell colSpan={10} sx={{ textAlign: 'center', py: 6 }}>
                   <ReceiptLongOutlined sx={{ fontSize: 40, color: COLORS.textMuted, mb: 1, display: 'block', mx: 'auto' }} />
                   <Typography variant="body2" sx={{ color: COLORS.textMuted }}>Sin nóminas generadas</Typography>
                 </TableCell>
@@ -418,21 +709,43 @@ export default function PayrollPage() {
               const overtimeRate = getOvertimeHourlyRate(emp)
               const overtimeHours = parseFloat(p.overtime_hours) || 0
               const hasOvertime = overtimeHours > 0
+              const isDecimoPayroll = p.payroll_type === 'decimo'
               const isRejected = p.status === 'anulado'
               const canApprove = p.status === 'borrador' && user?.role === 'admin'
               const canReject = ['borrador', 'procesado'].includes(p.status) && user?.role === 'admin'
               const canDelete = p.status === 'borrador'
               const hasActions = canApprove || canReject || canDelete
+              const isExpanded = expandedId === p.id
 
               return (
+                <Fragment key={p.id}>
                 <TableRow
-                  key={p.id}
+                  hover
+                  onClick={() => toggleExpand(p.id)}
                   sx={{
+                    cursor: 'pointer',
                     opacity: isRejected ? 0.65 : 1,
-                    bgcolor: isRejected ? alpha(COLORS.error, 0.03) : 'transparent',
+                    bgcolor: isExpanded
+                      ? alpha(COLORS.brand, 0.04)
+                      : isRejected ? alpha(COLORS.error, 0.03) : 'transparent',
                   }}
                 >
-                  <TableCell sx={{ fontFamily: '"DM Mono", monospace', fontSize: '0.75rem', color: COLORS.textMuted }}>#{p.id}</TableCell>
+                  <TableCell sx={{ fontFamily: '"DM Mono", monospace', fontSize: '0.75rem', color: COLORS.textMuted, width: 48 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      {isExpanded
+                        ? <KeyboardArrowDownOutlined sx={{ fontSize: 18, color: COLORS.brand }} />
+                        : <KeyboardArrowRightOutlined sx={{ fontSize: 18, color: COLORS.textMuted }} />}
+                      #{p.id}
+                    </Box>
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={isDecimoPayroll ? 'Décimo' : 'Regular'}
+                      size="small"
+                      color={isDecimoPayroll ? 'info' : 'default'}
+                      variant={isDecimoPayroll ? 'filled' : 'outlined'}
+                    />
+                  </TableCell>
                   <TableCell sx={{ fontWeight: 500, color: isRejected ? COLORS.textSecondary : COLORS.textPrimary }}>
                     {emp ? `${emp.first_name} ${emp.last_name}` : `ID ${p.employee_id}`}
                   </TableCell>
@@ -460,19 +773,13 @@ export default function PayrollPage() {
                     </Tooltip>
                   </TableCell>
                   <TableCell sx={{ fontFamily: '"DM Mono", monospace', fontSize: '0.8rem' }}>{fmt(p.gross_salary)}</TableCell>
-                  <TableCell sx={{ fontFamily: '"DM Mono", monospace', fontSize: '0.8rem', color: COLORS.error }}>
-                    <Tooltip title={
-                      <Box sx={{ fontSize: '0.75rem', lineHeight: 1.6 }}>
-                        <div>SS (9.75%): {fmt(p.social_security)}</div>
-                        <div>Seg. educativo (1.25%): {fmt(p.educational_insurance ?? 0)}</div>
-                        <div>ISR: {fmt(p.income_tax)}</div>
-                        {parseFloat(p.other_deductions) > 0 && (
-                          <div>Otras deducciones: {fmt(p.other_deductions)}</div>
-                        )}
-                      </Box>
-                    }>
-                      <span>{fmt(p.total_deductions)}</span>
-                    </Tooltip>
+                  <TableCell sx={{ fontFamily: '"DM Mono", monospace', fontSize: '0.8rem', color: COLORS.error, fontWeight: 600 }}>
+                    {fmt(p.total_deductions)}
+                    {parseFloat(p.other_deductions) > 0 && (
+                      <Typography component="span" sx={{ display: 'block', fontSize: '0.65rem', color: COLORS.textMuted, fontWeight: 400 }}>
+                        + {fmt(p.other_deductions)} otras
+                      </Typography>
+                    )}
                   </TableCell>
                   <TableCell sx={{ fontFamily: '"DM Mono", monospace', fontSize: '0.85rem', fontWeight: 700, color: isRejected ? COLORS.textMuted : COLORS.success }}>
                     {fmt(p.net_salary)}
@@ -480,7 +787,7 @@ export default function PayrollPage() {
                   <TableCell>
                     <Chip label={statusLabel[p.status] || p.status} size="small" color={statusColor[p.status] || 'default'} />
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={e => e.stopPropagation()}>
                     {hasActions ? (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
                         {canApprove && (
@@ -515,6 +822,14 @@ export default function PayrollPage() {
                     )}
                   </TableCell>
                 </TableRow>
+                <TableRow key={`${p.id}-detail`}>
+                  <TableCell colSpan={10} sx={{ py: 0, px: 0, borderBottom: isExpanded ? undefined : 'none' }}>
+                    <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                      <DeductionBreakdown payroll={p} fmt={fmt} />
+                    </Collapse>
+                  </TableCell>
+                </TableRow>
+                </Fragment>
               )
             })}
           </TableBody>
@@ -642,6 +957,30 @@ export default function PayrollPage() {
 
         <DialogContent sx={{ px: 3, pt: 1, pb: 1, overflow: 'visible' }}>
           {error && <AppAlert severity="error">{error}</AppAlert>}
+
+          <Typography sx={{
+            fontFamily: '"DM Mono", monospace',
+            fontSize: '0.68rem',
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            color: COLORS.textMuted,
+            mb: 1.5,
+          }}>
+            Tipo de nómina
+          </Typography>
+
+          <TextField
+            fullWidth
+            select
+            label="Tipo"
+            value={form.payroll_type}
+            onChange={e => field('payroll_type', e.target.value)}
+            sx={{ mb: 2.5 }}
+          >
+            {PAYROLL_TYPES.map(opt => (
+              <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+            ))}
+          </TextField>
 
           <Typography sx={{
             fontFamily: '"DM Mono", monospace',
@@ -782,31 +1121,102 @@ export default function PayrollPage() {
             color: COLORS.textMuted,
             mb: 1.5,
           }}>
-            Período y cálculo
+            {isDecimoMode ? 'Cuatrimestre y pago' : 'Período y cálculo'}
           </Typography>
 
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              <TextField fullWidth label="Inicio período" type="date" value={form.period_start}
-                onChange={e => field('period_start', e.target.value)} InputLabelProps={{ shrink: true }} />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField fullWidth label="Fin período" type="date" value={form.period_end}
-                onChange={e => field('period_end', e.target.value)} InputLabelProps={{ shrink: true }} />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <TextField fullWidth label="Horas extra (confianza)" type="number" value={form.overtime_hours}
-                onChange={e => field('overtime_hours', e.target.value)} inputProps={{ min: 0, step: 0.5 }}
-                helperText="Solo personal de confianza. Demás: desde marcación (+25% diurno)" />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <TextField fullWidth label="Bonificaciones" type="number" value={form.bonuses}
-                onChange={e => field('bonuses', e.target.value)} inputProps={{ min: 0, step: 0.01 }} />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <TextField fullWidth label="Otras deducciones" type="number" value={form.other_deductions}
-                onChange={e => field('other_deductions', e.target.value)} inputProps={{ min: 0, step: 0.01 }} />
-            </Grid>
+            {isDecimoMode ? (
+              <>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth label="Año de pago" type="number" value={form.cuatrimestre_year}
+                    onChange={e => field('cuatrimestre_year', e.target.value)} inputProps={{ min: 2000, max: 2100 }}
+                    helperText="Año en que se paga la cuota (ej. 2026 para pago 15 abr 2026)" />
+                </Grid>
+                <Grid item xs={12} sm={8}>
+                  <TextField fullWidth select label="Cuota" value={form.cuatrimestre}
+                    onChange={e => field('cuatrimestre', e.target.value)}>
+                    {CUATRIMESTRE_OPTIONS.map(opt => (
+                      <MenuItem key={opt.value} value={String(opt.value)}>{opt.label}</MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth label="Fecha de pago" type="date" value={form.payment_date}
+                    onChange={e => field('payment_date', e.target.value)} InputLabelProps={{ shrink: true }}
+                    helperText="Sugerido: 15 abr, 15 ago o 15 dic" />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth label="Otras deducciones" type="number" value={form.other_deductions}
+                    onChange={e => field('other_deductions', e.target.value)} inputProps={{ min: 0, step: 0.01 }} />
+                </Grid>
+                <Grid item xs={12}>
+                  <Button
+                    variant="outlined"
+                    onClick={handlePreviewDecimo}
+                    disabled={previewLoading || targetCount === 0}
+                    sx={{ mb: 1 }}
+                  >
+                    {previewLoading ? <CircularProgress size={18} /> : 'Vista previa del décimo'}
+                  </Button>
+                </Grid>
+                {decimoPreview?.items?.length > 0 && (
+                  <Grid item xs={12}>
+                    <TableContainer sx={{ border: `1px solid ${COLORS.borderSubtle}`, borderRadius: 2, maxHeight: 240 }}>
+                      <Table size="small" stickyHeader>
+                        <TableHead>
+                          <TableRow>
+                            {['Empleado', 'Devengado', 'Décimo', 'Notas'].map(h => (
+                              <TableCell key={h}>{h}</TableCell>
+                            ))}
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {decimoPreview.items.map(item => (
+                            <TableRow key={item.employee_id}>
+                              <TableCell>{item.employee_name}</TableCell>
+                              <TableCell sx={{ fontFamily: '"DM Mono", monospace', fontSize: '0.75rem' }}>{fmt(item.accrued_total)}</TableCell>
+                              <TableCell sx={{ fontFamily: '"DM Mono", monospace', fontSize: '0.75rem', fontWeight: 700, color: COLORS.brand }}>{fmt(item.decimo_amount)}</TableCell>
+                              <TableCell sx={{ fontSize: '0.72rem', color: COLORS.textSecondary }}>
+                                {item.is_proportional ? 'Proporcional' : 'Completo'}
+                                {item.notes ? ` · ${item.notes}` : ''}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </Grid>
+                )}
+              </>
+            ) : (
+              <>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth label="Inicio período" type="date" value={form.period_start}
+                    onChange={e => field('period_start', e.target.value)} InputLabelProps={{ shrink: true }} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth label="Fin período" type="date" value={form.period_end}
+                    onChange={e => field('period_end', e.target.value)} InputLabelProps={{ shrink: true }} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth label="Horas extra (confianza)" type="number" value={form.overtime_hours}
+                    onChange={e => field('overtime_hours', e.target.value)} inputProps={{ min: 0, step: 0.5 }}
+                    helperText="Solo personal de confianza. Demás: desde marcación (+25% diurno)" />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth label="Bonificaciones" type="number" value={form.bonuses}
+                    onChange={e => field('bonuses', e.target.value)} inputProps={{ min: 0, step: 0.01 }} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth label="Comisiones" type="number" value={form.commissions}
+                    onChange={e => field('commissions', e.target.value)} inputProps={{ min: 0, step: 0.01 }} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth label="Otras deducciones" type="number" value={form.other_deductions}
+                    onChange={e => field('other_deductions', e.target.value)} inputProps={{ min: 0, step: 0.01 }} />
+                </Grid>
+              </>
+            )}
             <Grid item xs={12}>
               <TextField fullWidth label="Notas (opcional)" value={form.notes}
                 onChange={e => field('notes', e.target.value)} multiline rows={2} />
@@ -814,9 +1224,9 @@ export default function PayrollPage() {
           </Grid>
 
           <Typography sx={{ mt: 2, fontSize: '0.75rem', color: COLORS.textMuted }}>
-            El salario base se prorratea según los días del período. Para empleados sin personal de confianza,
-            se validan marcaciones completas (entrada y salida) en días laborables y feriados excluidos.
-            Horas extra desde marcación con recargos legales: diurna +25%, nocturna +50%, máx. 3 h/día y 9 h/semana.
+            {isDecimoMode
+              ? 'El décimo suma el devengado bruto del período de la cuota (1.ª: dic–mar, 2.ª: abr–jul, 3.ª: ago–nov) y lo divide entre 12. La 1.ª cuota incluye diciembre del año anterior. Si faltan nóminas regulares, se proyecta el salario base.'
+              : 'El salario base se prorratea según los días del período. Para empleados sin personal de confianza, se validan marcaciones completas (entrada y salida) en días laborables y feriados excluidos. Horas extra desde marcación con recargos legales: diurna +25%, nocturna +50%, máx. 3 h/día y 9 h/semana.'}
           </Typography>
         </DialogContent>
 
@@ -830,7 +1240,9 @@ export default function PayrollPage() {
                   <CircularProgress size={18} sx={{ color: COLORS.white }} />
                   <span>{saveProgress.total > 1 ? `${saveProgress.current}/${saveProgress.total}` : 'Generando…'}</span>
                 </Box>
-              : `Generar ${targetCount} nómina${targetCount !== 1 ? 's' : ''}`}
+              : isDecimoMode
+                ? `Generar décimo (${targetCount})`
+                : `Generar ${targetCount} nómina${targetCount !== 1 ? 's' : ''}`}
           </Button>
         </DialogActions>
       </Dialog>

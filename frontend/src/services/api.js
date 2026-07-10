@@ -78,6 +78,7 @@ export const employeesApi = {
 export const payrollApi = {
   list: (params) => api.get('/payroll/', { params }),
   create: (data) => api.post('/payroll/', data),
+  previewDecimo: (data) => api.post('/payroll/preview-decimo', data),
   approve: (id) => api.patch(`/payroll/${id}/approve`),
   reject: (id, reason) => api.patch(`/payroll/${id}/reject`, { reason }),
   remove: (id) => api.delete(`/payroll/${id}`),
@@ -109,4 +110,12 @@ export const timesheetsApi = {
   list: (params) => api.get('/timesheets/', { params }),
   bulkUpsert: (data) => api.put('/timesheets/bulk', data),
   validate: (params) => api.get('/timesheets/validate', { params }),
+}
+
+export const reportsApi = {
+  vacations: (params) => api.get('/reports/vacations', { params }),
+  vacationsTaken: (params) => api.get('/reports/vacations/taken', { params }),
+  vacationDetail: (id, params) => api.get(`/reports/vacations/${id}`, { params }),
+  registerVacationUsage: (data) => api.post('/reports/vacations/usages', data),
+  deleteVacationUsage: (id) => api.delete(`/reports/vacations/usages/${id}`),
 }

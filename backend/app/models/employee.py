@@ -47,6 +47,9 @@ class Employee(Base):
     works_saturday_half_day = Column(Boolean, nullable=False, default=False)
     is_trusted_staff = Column(Boolean, nullable=False, default=False)
     hire_date = Column(Date, nullable=False)
+    termination_date = Column(Date, nullable=True)
+    vacation_opening_balance = Column(Numeric(8, 2), nullable=False, default=0)
+    vacation_opening_balance_date = Column(Date, nullable=True)
     contract_type = Column(SAEnum(ContractType), default=ContractType.indefinido)
     status = Column(SAEnum(EmployeeStatus), default=EmployeeStatus.activo)
     is_active = Column(Boolean, default=True)
@@ -55,6 +58,7 @@ class Employee(Base):
 
     payrolls = relationship("Payroll", back_populates="employee")
     timesheet_entries = relationship("TimesheetEntry", back_populates="employee")
+    vacation_usages = relationship("VacationUsage", back_populates="employee")
 
     @property
     def full_name(self):

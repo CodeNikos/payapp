@@ -134,3 +134,71 @@ async def run_migrations():
         await conn.execute(text(
             "CREATE INDEX IF NOT EXISTS ix_timesheet_work_date ON timesheet_entries (work_date)"
         ))
+        await conn.execute(text(
+            "ALTER TABLE employees "
+            "ADD COLUMN IF NOT EXISTS termination_date DATE"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE payrolls "
+            "ADD COLUMN IF NOT EXISTS commissions NUMERIC(12, 2) NOT NULL DEFAULT 0"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE payrolls "
+            "ADD COLUMN IF NOT EXISTS payroll_type VARCHAR(20) NOT NULL DEFAULT 'regular'"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE payrolls "
+            "ADD COLUMN IF NOT EXISTS decimo_accrued_total NUMERIC(12, 2)"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE payrolls "
+            "ADD COLUMN IF NOT EXISTS cuatrimestre INTEGER"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE payrolls "
+            "ADD COLUMN IF NOT EXISTS cuatrimestre_year INTEGER"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE employees "
+            "ADD COLUMN IF NOT EXISTS vacation_opening_balance NUMERIC(8, 2) NOT NULL DEFAULT 0"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE employees "
+            "ADD COLUMN IF NOT EXISTS vacation_opening_balance_date DATE"
+        ))
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS vacation_usages (
+                id SERIAL PRIMARY KEY,
+                employee_id INTEGER NOT NULL REFERENCES employees(id),
+                start_date DATE NOT NULL,
+                end_date DATE NOT NULL,
+                usage_date DATE NOT NULL,
+                days NUMERIC(8, 2) NOT NULL,
+                amount NUMERIC(12, 2) NOT NULL,
+                notes TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ
+            )
+        """))
+        await conn.execute(text(
+            "ALTER TABLE vacation_usages ADD COLUMN IF NOT EXISTS start_date DATE"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE vacation_usages ADD COLUMN IF NOT EXISTS end_date DATE"
+        ))
+        await conn.execute(text("""
+            UPDATE vacation_usages
+            SET start_date = usage_date
+            WHERE start_date IS NULL AND usage_date IS NOT NULL
+        """))
+        await conn.execute(text("""
+            UPDATE vacation_usages
+            SET end_date = usage_date
+            WHERE end_date IS NULL AND usage_date IS NOT NULL
+        """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_vacation_usages_employee_id ON vacation_usages (employee_id)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_vacation_usages_usage_date ON vacation_usages (usage_date)"
+        ))

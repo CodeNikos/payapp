@@ -1,270 +1,877 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from sqlalchemy import select
+
 from typing import List, Optional
+
 from decimal import Decimal
+
 import calendar
+
 from datetime import date
 
+
+
 from app.core.database import get_db
+
 from app.core.security import get_current_user, require_role
-from app.models.payroll import Payroll, PayrollStatus
+
+from app.models.payroll import Payroll, PayrollStatus, PayrollType
+
 from app.models.employee import Employee, effective_weekly_hours
+
 from app.models.holiday import Holiday
+
 from app.models.timesheet import TimesheetEntry
+
 from app.models.user import User
-from app.schemas.payroll import PayrollCreate, PayrollReject, PayrollResponse
-from app.services.labor_hours import (
-    calculate_manual_overtime,
-    calculate_overtime_from_timesheets,
-    validate_timesheet_completeness,
+
+from app.schemas.payroll import (
+
+    PayrollCreate,
+
+    PayrollReject,
+
+    PayrollResponse,
+
+    DecimoPreviewRequest,
+
+    DecimoPreviewResponse,
+
+    DecimoPreviewItem,
+
 )
+
+from app.services.labor_hours import (
+
+    calculate_manual_overtime,
+
+    calculate_overtime_from_timesheets,
+
+    validate_timesheet_completeness,
+
+)
+
+from app.services.decimo import (
+
+    calculate_decimo,
+
+    get_cuatrimestre_bounds,
+
+)
+
+
 
 router = APIRouter()
 
+
+
 SS_EMPLOYEE_RATE = Decimal("0.0975")
+
 EDUCATIONAL_INSURANCE_RATE = Decimal("0.0125")
+
 ISR_ANNUAL_EXEMPT = Decimal("11000")
+
 ISR_RATE = Decimal("0.15")
+
 ISR_MONTHS = Decimal("13")
 
 
+
+
+
 def _inclusive_days(start: date, end: date) -> int:
+
     return (end - start).days + 1
 
 
+
+
+
 def _period_proration_factor(period_start: date, period_end: date) -> Decimal:
+
     if period_start.year == period_end.year and period_start.month == period_end.month:
+
         days_in_month = calendar.monthrange(period_start.year, period_start.month)[1]
+
         return Decimal(_inclusive_days(period_start, period_end)) / Decimal(days_in_month)
 
+
+
     factor = Decimal("0")
+
     current = period_start
+
     while current <= period_end:
+
         last_day = calendar.monthrange(current.year, current.month)[1]
+
         month_end = min(period_end, date(current.year, current.month, last_day))
+
         segment_days = _inclusive_days(current, month_end)
+
         factor += Decimal(segment_days) / Decimal(last_day)
+
         if month_end >= period_end:
+
             break
+
         current = date(current.year + 1, 1, 1) if current.month == 12 else date(current.year, current.month + 1, 1)
+
     return factor
 
 
+
+
+
 def calculate_isr(monthly_salary: Decimal, period_factor: Decimal) -> Decimal:
+
     annualized = monthly_salary * ISR_MONTHS
+
     taxable = annualized - ISR_ANNUAL_EXEMPT
+
     if taxable <= 0:
+
         return Decimal("0")
+
     monthly_isr = taxable * ISR_RATE / ISR_MONTHS
+
     return (monthly_isr * period_factor).quantize(Decimal("0.01"))
 
 
+
+
+
 def _hourly_rate(employee: Employee) -> Decimal:
+
     weekly_hours = effective_weekly_hours(employee)
+
     monthly_hours = weekly_hours * Decimal("52") / Decimal("12")
+
     if monthly_hours <= 0:
+
         return Decimal("0")
+
     return (employee.base_salary / monthly_hours).quantize(Decimal("0.0001"))
 
 
-async def _get_holiday_dates(db: AsyncSession, start: date, end: date) -> set[date]:
-    result = await db.execute(
-        select(Holiday.holiday_date).where(
-            Holiday.holiday_date >= start,
-            Holiday.holiday_date <= end,
-        )
-    )
-    return {row[0] for row in result.all()}
 
 
-async def _get_timesheet_entries(
-    db: AsyncSession,
-    employee_id: int,
-    period_start: date,
-    period_end: date,
-) -> list[TimesheetEntry]:
-    result = await db.execute(
-        select(TimesheetEntry).where(
-            TimesheetEntry.employee_id == employee_id,
-            TimesheetEntry.work_date >= period_start,
-            TimesheetEntry.work_date <= period_end,
-        )
-    )
-    return list(result.scalars().all())
 
+def _apply_deductions(
 
-def calculate_payroll(
-    employee: Employee,
-    data: PayrollCreate,
-    timesheet_entries: Optional[list[TimesheetEntry]] = None,
-    holidays: Optional[set[date]] = None,
+    gross: Decimal,
+
+    full_base: Decimal,
+
+    period_factor: Decimal,
+
+    other_deductions: Decimal,
+
 ) -> dict:
-    full_base = employee.base_salary
-    period_factor = _period_proration_factor(data.period_start, data.period_end)
-    base = (full_base * period_factor).quantize(Decimal("0.01"))
-    hourly = _hourly_rate(employee)
-
-    overtime_hours = Decimal("0")
-    overtime_amount = Decimal("0")
-    notes_extra: list[str] = []
-
-    if employee.is_trusted_staff:
-        overtime_hours, overtime_amount = calculate_manual_overtime(hourly, data.overtime_hours)
-    else:
-        entries = timesheet_entries or []
-        holidays = holidays or set()
-        entries_by_date = {e.work_date: e for e in entries}
-        missing = validate_timesheet_completeness(
-            employee, entries_by_date, holidays, data.period_start, data.period_end
-        )
-        if missing:
-            raise ValueError(
-                f"Marcaciones incompletas en: {', '.join(missing[:5])}"
-                + (f" y {len(missing) - 5} más" if len(missing) > 5 else "")
-            )
-        ot_result = calculate_overtime_from_timesheets(hourly, entries)
-        overtime_hours = ot_result.total_hours
-        overtime_amount = ot_result.total_amount
-        notes_extra.extend(ot_result.warnings)
-
-    gross = base + overtime_amount + data.bonuses
 
     social_security = (gross * SS_EMPLOYEE_RATE).quantize(Decimal("0.01"))
-    educational_insurance = (gross * EDUCATIONAL_INSURANCE_RATE).quantize(Decimal("0.01"))
-    income_tax = calculate_isr(full_base, period_factor)
-    total_deductions = social_security + educational_insurance + income_tax
-    net = gross - total_deductions - data.other_deductions
 
-    notes = data.notes
-    if notes_extra:
-        warning_text = " | ".join(notes_extra)
-        notes = f"{notes}\n[Horas extra] {warning_text}".strip() if notes else f"[Horas extra] {warning_text}"
+    educational_insurance = (gross * EDUCATIONAL_INSURANCE_RATE).quantize(Decimal("0.01"))
+
+    income_tax = calculate_isr(full_base, period_factor)
+
+    total_deductions = social_security + educational_insurance + income_tax
+
+    net = gross - total_deductions - other_deductions
 
     return {
-        "base_salary": base,
-        "overtime_hours": overtime_hours,
-        "overtime_amount": overtime_amount,
-        "bonuses": data.bonuses,
-        "gross_salary": gross.quantize(Decimal("0.01")),
+
         "social_security": social_security,
+
         "educational_insurance": educational_insurance,
+
         "income_tax": income_tax,
-        "other_deductions": data.other_deductions,
+
         "total_deductions": total_deductions.quantize(Decimal("0.01")),
+
         "net_salary": net.quantize(Decimal("0.01")),
-        "notes": notes,
+
     }
 
 
+
+
+
+async def _get_holiday_dates(db: AsyncSession, start: date, end: date) -> set[date]:
+
+    result = await db.execute(
+
+        select(Holiday.holiday_date).where(
+
+            Holiday.holiday_date >= start,
+
+            Holiday.holiday_date <= end,
+
+        )
+
+    )
+
+    return {row[0] for row in result.all()}
+
+
+
+
+
+async def _get_timesheet_entries(
+
+    db: AsyncSession,
+
+    employee_id: int,
+
+    period_start: date,
+
+    period_end: date,
+
+) -> list[TimesheetEntry]:
+
+    result = await db.execute(
+
+        select(TimesheetEntry).where(
+
+            TimesheetEntry.employee_id == employee_id,
+
+            TimesheetEntry.work_date >= period_start,
+
+            TimesheetEntry.work_date <= period_end,
+
+        )
+
+    )
+
+    return list(result.scalars().all())
+
+
+
+
+
+async def _get_employee_payrolls_for_cuatrimestre(
+
+    db: AsyncSession,
+
+    employee_id: int,
+
+    year: int,
+
+    quarter: int,
+
+) -> list[Payroll]:
+
+    period_start, period_end, _ = get_cuatrimestre_bounds(year, quarter)
+
+    result = await db.execute(
+
+        select(Payroll).where(
+
+            Payroll.employee_id == employee_id,
+
+            Payroll.period_start <= period_end,
+
+            Payroll.period_end >= period_start,
+
+        )
+
+    )
+
+    return list(result.scalars().all())
+
+
+
+
+
+async def _check_decimo_duplicate(
+
+    db: AsyncSession,
+
+    employee_id: int,
+
+    year: int,
+
+    quarter: int,
+
+) -> None:
+
+    result = await db.execute(
+
+        select(Payroll).where(
+
+            Payroll.employee_id == employee_id,
+
+            Payroll.payroll_type == PayrollType.decimo,
+
+            Payroll.cuatrimestre == quarter,
+
+            Payroll.cuatrimestre_year == year,
+
+            Payroll.status != PayrollStatus.anulado,
+
+        )
+
+    )
+
+    if result.scalar_one_or_none():
+
+        raise HTTPException(
+
+            status_code=400,
+
+            detail=f"Ya existe una nómina de décimo para el cuatrimestre {quarter}/{year}",
+
+        )
+
+
+
+
+
+def calculate_regular_payroll(
+
+    employee: Employee,
+
+    data: PayrollCreate,
+
+    timesheet_entries: Optional[list[TimesheetEntry]] = None,
+
+    holidays: Optional[set[date]] = None,
+
+) -> dict:
+
+    full_base = employee.base_salary
+
+    period_factor = _period_proration_factor(data.period_start, data.period_end)
+
+    base = (full_base * period_factor).quantize(Decimal("0.01"))
+
+    hourly = _hourly_rate(employee)
+
+
+
+    overtime_hours = Decimal("0")
+
+    overtime_amount = Decimal("0")
+
+    notes_extra: list[str] = []
+
+
+
+    if employee.is_trusted_staff:
+
+        overtime_hours, overtime_amount = calculate_manual_overtime(hourly, data.overtime_hours)
+
+    else:
+
+        entries = timesheet_entries or []
+
+        holidays = holidays or set()
+
+        entries_by_date = {e.work_date: e for e in entries}
+
+        missing = validate_timesheet_completeness(
+
+            employee, entries_by_date, holidays, data.period_start, data.period_end
+
+        )
+
+        if missing:
+
+            raise ValueError(
+
+                f"Marcaciones incompletas en: {', '.join(missing[:5])}"
+
+                + (f" y {len(missing) - 5} más" if len(missing) > 5 else "")
+
+            )
+
+        ot_result = calculate_overtime_from_timesheets(hourly, entries)
+
+        overtime_hours = ot_result.total_hours
+
+        overtime_amount = ot_result.total_amount
+
+        notes_extra.extend(ot_result.warnings)
+
+
+
+    gross = base + overtime_amount + data.bonuses + data.commissions
+
+    deductions = _apply_deductions(gross, full_base, period_factor, data.other_deductions)
+
+
+
+    notes = data.notes
+
+    if notes_extra:
+
+        warning_text = " | ".join(notes_extra)
+
+        notes = f"{notes}\n[Horas extra] {warning_text}".strip() if notes else f"[Horas extra] {warning_text}"
+
+
+
+    return {
+
+        "period_start": data.period_start,
+
+        "period_end": data.period_end,
+
+        "payroll_type": PayrollType.regular,
+
+        "base_salary": base,
+
+        "overtime_hours": overtime_hours,
+
+        "overtime_amount": overtime_amount,
+
+        "bonuses": data.bonuses,
+
+        "commissions": data.commissions,
+
+        "gross_salary": gross.quantize(Decimal("0.01")),
+
+        "decimo_accrued_total": None,
+
+        "cuatrimestre": None,
+
+        "cuatrimestre_year": None,
+
+        "other_deductions": data.other_deductions,
+
+        "notes": notes,
+
+        **deductions,
+
+    }
+
+
+
+
+
+def calculate_decimo_payroll(
+
+    employee: Employee,
+
+    data: PayrollCreate,
+
+    existing_payrolls: list[Payroll],
+
+) -> dict:
+
+    breakdown = calculate_decimo(employee, data.cuatrimestre_year, data.cuatrimestre, existing_payrolls)
+
+    if breakdown is None:
+
+        raise ValueError("El empleado no tiene período de acumulación válido en este cuatrimestre")
+
+
+
+    _, _, suggested_payment = get_cuatrimestre_bounds(data.cuatrimestre_year, data.cuatrimestre)
+
+    gross = breakdown.decimo_amount
+
+    period_factor = _period_proration_factor(breakdown.accrual_start, breakdown.accrual_end)
+
+    deductions = _apply_deductions(gross, employee.base_salary, period_factor, data.other_deductions)
+
+
+
+    notes = data.notes or ""
+
+    if breakdown.notes:
+
+        decimo_note = f"[Décimo] {breakdown.notes}"
+
+        notes = f"{notes}\n{decimo_note}".strip() if notes else decimo_note
+
+
+
+    return {
+
+        "period_start": breakdown.accrual_start,
+
+        "period_end": breakdown.accrual_end,
+
+        "payroll_type": PayrollType.decimo,
+
+        "base_salary": breakdown.base_from_payrolls + breakdown.projected_base,
+
+        "overtime_hours": Decimal("0"),
+
+        "overtime_amount": breakdown.overtime_from_payrolls,
+
+        "bonuses": breakdown.bonuses_from_payrolls,
+
+        "commissions": breakdown.commissions_from_payrolls,
+
+        "gross_salary": gross,
+
+        "decimo_accrued_total": breakdown.accrued_total,
+
+        "cuatrimestre": data.cuatrimestre,
+
+        "cuatrimestre_year": data.cuatrimestre_year,
+
+        "payment_date": data.payment_date or suggested_payment,
+
+        "other_deductions": data.other_deductions,
+
+        "notes": notes,
+
+        **deductions,
+
+    }
+
+
+
+
+
 @router.get("/", response_model=List[PayrollResponse])
+
 async def list_payrolls(
+
     skip: int = Query(0, ge=0),
+
     limit: int = Query(50, ge=1, le=200),
+
     employee_id: Optional[int] = None,
+
     status: Optional[PayrollStatus] = None,
+
+    payroll_type: Optional[PayrollType] = None,
+
     db: AsyncSession = Depends(get_db),
+
     current_user: User = Depends(get_current_user),
+
 ):
+
     query = select(Payroll)
+
     if employee_id:
+
         query = query.where(Payroll.employee_id == employee_id)
+
     if status:
+
         query = query.where(Payroll.status == status)
+
+    if payroll_type:
+
+        query = query.where(Payroll.payroll_type == payroll_type)
+
     result = await db.execute(query.offset(skip).limit(limit).order_by(Payroll.created_at.desc()))
+
     return [PayrollResponse.model_validate(p) for p in result.scalars().all()]
 
 
-@router.post("/", response_model=PayrollResponse, status_code=201)
-async def create_payroll(
-    data: PayrollCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    result = await db.execute(select(Employee).where(Employee.id == data.employee_id, Employee.is_active == True))
-    employee = result.scalar_one_or_none()
-    if not employee:
-        raise HTTPException(status_code=404, detail="Empleado no encontrado")
 
-    holidays: set[date] = set()
-    timesheet_entries: list[TimesheetEntry] = []
-    if not employee.is_trusted_staff:
-        holidays = await _get_holiday_dates(db, data.period_start, data.period_end)
-        timesheet_entries = await _get_timesheet_entries(
-            db, data.employee_id, data.period_start, data.period_end
+
+
+@router.post("/preview-decimo", response_model=DecimoPreviewResponse)
+
+async def preview_decimo(
+
+    data: DecimoPreviewRequest,
+
+    db: AsyncSession = Depends(get_db),
+
+    current_user: User = Depends(get_current_user),
+
+):
+
+    _, _, suggested_payment = get_cuatrimestre_bounds(data.year, data.cuatrimestre)
+
+    period_start, period_end, _ = get_cuatrimestre_bounds(data.year, data.cuatrimestre)
+
+    emp_query = select(Employee).where(
+        (Employee.is_active == True)
+        | (
+            (Employee.termination_date.isnot(None))
+            & (Employee.termination_date >= period_start)
+            & (Employee.termination_date <= period_end)
+        )
+    )
+
+    if data.employee_ids:
+
+        emp_query = emp_query.where(Employee.id.in_(data.employee_ids))
+
+    emp_result = await db.execute(emp_query)
+
+    employees = list(emp_result.scalars().all())
+
+
+
+    items: list[DecimoPreviewItem] = []
+
+    for employee in employees:
+
+        payrolls = await _get_employee_payrolls_for_cuatrimestre(
+
+            db, employee.id, data.year, data.cuatrimestre
+
         )
 
+        breakdown = calculate_decimo(employee, data.year, data.cuatrimestre, payrolls)
+
+        if breakdown is None:
+
+            continue
+
+        items.append(DecimoPreviewItem(
+
+            employee_id=employee.id,
+
+            employee_name=employee.full_name,
+
+            accrual_start=breakdown.accrual_start,
+
+            accrual_end=breakdown.accrual_end,
+
+            base_from_payrolls=breakdown.base_from_payrolls,
+
+            overtime_from_payrolls=breakdown.overtime_from_payrolls,
+
+            bonuses_from_payrolls=breakdown.bonuses_from_payrolls,
+
+            commissions_from_payrolls=breakdown.commissions_from_payrolls,
+
+            projected_base=breakdown.projected_base,
+
+            accrued_total=breakdown.accrued_total,
+
+            decimo_amount=breakdown.decimo_amount,
+
+            is_proportional=breakdown.is_proportional,
+
+            notes=breakdown.notes,
+
+            suggested_payment_date=suggested_payment,
+
+        ))
+
+
+
+    return DecimoPreviewResponse(
+
+        year=data.year,
+
+        cuatrimestre=data.cuatrimestre,
+
+        suggested_payment_date=suggested_payment,
+
+        items=items,
+
+    )
+
+
+
+
+
+@router.post("/", response_model=PayrollResponse, status_code=201)
+
+async def create_payroll(
+
+    data: PayrollCreate,
+
+    db: AsyncSession = Depends(get_db),
+
+    current_user: User = Depends(get_current_user),
+
+):
+
+    result = await db.execute(select(Employee).where(Employee.id == data.employee_id))
+
+    employee = result.scalar_one_or_none()
+
+    if not employee:
+
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+
+    if data.payroll_type == PayrollType.regular and not employee.is_active:
+
+        raise HTTPException(status_code=400, detail="El empleado no está activo")
+
+
+
     try:
-        calcs = calculate_payroll(employee, data, timesheet_entries, holidays)
+
+        if data.payroll_type == PayrollType.decimo:
+
+            await _check_decimo_duplicate(db, data.employee_id, data.cuatrimestre_year, data.cuatrimestre)
+
+            existing_payrolls = await _get_employee_payrolls_for_cuatrimestre(
+
+                db, data.employee_id, data.cuatrimestre_year, data.cuatrimestre
+
+            )
+
+            calcs = calculate_decimo_payroll(employee, data, existing_payrolls)
+
+        else:
+
+            holidays: set[date] = set()
+
+            timesheet_entries: list[TimesheetEntry] = []
+
+            if not employee.is_trusted_staff:
+
+                holidays = await _get_holiday_dates(db, data.period_start, data.period_end)
+
+                timesheet_entries = await _get_timesheet_entries(
+
+                    db, data.employee_id, data.period_start, data.period_end
+
+                )
+
+            calcs = calculate_regular_payroll(employee, data, timesheet_entries, holidays)
+
     except ValueError as exc:
+
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+
+
     notes = calcs.pop("notes", data.notes)
+
+    payment_date = calcs.pop("payment_date", data.payment_date)
+
     payroll = Payroll(
+
         employee_id=data.employee_id,
-        period_start=data.period_start,
-        period_end=data.period_end,
+
         notes=notes,
+
+        payment_date=payment_date,
+
         created_by=current_user.id,
+
         **calcs,
+
     )
+
     db.add(payroll)
+
     await db.commit()
+
     await db.refresh(payroll)
+
     return PayrollResponse.model_validate(payroll)
+
+
+
 
 
 @router.patch("/{payroll_id}/approve", response_model=PayrollResponse)
+
 async def approve_payroll(
+
     payroll_id: int,
+
     db: AsyncSession = Depends(get_db),
+
     current_user: User = Depends(require_role("admin")),
+
 ):
+
     result = await db.execute(select(Payroll).where(Payroll.id == payroll_id))
+
     payroll = result.scalar_one_or_none()
+
     if not payroll:
+
         raise HTTPException(status_code=404, detail="Nómina no encontrada")
+
     if payroll.status != PayrollStatus.borrador:
+
         raise HTTPException(status_code=400, detail="Solo se puede aprobar una nómina en borrador")
+
     payroll.status = PayrollStatus.procesado
+
     await db.commit()
+
     await db.refresh(payroll)
+
     return PayrollResponse.model_validate(payroll)
+
+
+
 
 
 @router.patch("/{payroll_id}/reject", response_model=PayrollResponse)
+
 async def reject_payroll(
+
     payroll_id: int,
+
     data: PayrollReject = PayrollReject(),
+
     db: AsyncSession = Depends(get_db),
+
     current_user: User = Depends(require_role("admin")),
+
 ):
+
     result = await db.execute(select(Payroll).where(Payroll.id == payroll_id))
+
     payroll = result.scalar_one_or_none()
+
     if not payroll:
+
         raise HTTPException(status_code=404, detail="Nómina no encontrada")
+
     if payroll.status in (PayrollStatus.pagado, PayrollStatus.anulado):
+
         raise HTTPException(status_code=400, detail="No se puede rechazar una nómina pagada o ya rechazada")
+
     payroll.status = PayrollStatus.anulado
+
     if data.reason:
+
         rejection_note = f"[Rechazada] {data.reason.strip()}"
+
         payroll.notes = f"{payroll.notes}\n{rejection_note}".strip() if payroll.notes else rejection_note
+
     await db.commit()
+
     await db.refresh(payroll)
+
     return PayrollResponse.model_validate(payroll)
 
 
+
+
+
 @router.delete("/{payroll_id}", status_code=204)
+
 async def delete_payroll(
+
     payroll_id: int,
+
     db: AsyncSession = Depends(get_db),
+
     current_user: User = Depends(get_current_user),
+
 ):
+
     result = await db.execute(select(Payroll).where(Payroll.id == payroll_id))
+
     payroll = result.scalar_one_or_none()
+
     if not payroll:
+
         raise HTTPException(status_code=404, detail="Nómina no encontrada")
+
     if payroll.status != PayrollStatus.borrador:
+
         raise HTTPException(status_code=400, detail="Solo se pueden eliminar nóminas en borrador")
+
     await db.delete(payroll)
+
     await db.commit()
+

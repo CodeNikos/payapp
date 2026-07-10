@@ -5,9 +5,10 @@ from typing import List, Optional
 
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models.employee import Employee
+from app.models.employee import Employee, EmployeeStatus
 from app.models.user import User
 from app.schemas.employee import EmployeeCreate, EmployeeUpdate, EmployeeResponse
+from app.services.vacation import compute_vacation_balance_cutoff
 
 router = APIRouter()
 
@@ -56,6 +57,7 @@ async def create_employee(
     count = count_result.scalar()
 
     employee = Employee(**data.model_dump(), employee_code=generate_employee_code(count))
+    employee.vacation_opening_balance_date = compute_vacation_balance_cutoff(employee.hire_date)
     db.add(employee)
     await db.commit()
     await db.refresh(employee)
@@ -97,6 +99,13 @@ async def update_employee(
 
     for field, value in updates.items():
         setattr(employee, field, value)
+
+    if employee.termination_date and employee.is_active:
+        employee.is_active = False
+        if employee.status == EmployeeStatus.activo:
+            employee.status = EmployeeStatus.inactivo
+
+    employee.vacation_opening_balance_date = compute_vacation_balance_cutoff(employee.hire_date)
 
     await db.commit()
     await db.refresh(employee)

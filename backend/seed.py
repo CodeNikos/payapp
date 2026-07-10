@@ -10,6 +10,7 @@ from app.models.employee import Employee  # noqa: F401 — registers table with 
 from app.models.payroll import Payroll    # noqa: F401 — registers table with Base
 from app.models.holiday import Holiday    # noqa: F401 — registers table with Base
 from app.models.timesheet import TimesheetEntry  # noqa: F401 — registers table with Base
+from app.models.vacation_usage import VacationUsage  # noqa: F401 — registers table with Base
 
 
 async def seed():

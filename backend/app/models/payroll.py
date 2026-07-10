@@ -12,6 +12,11 @@ class PayrollStatus(str, enum.Enum):
     anulado = "anulado"
 
 
+class PayrollType(str, enum.Enum):
+    regular = "regular"
+    decimo = "decimo"
+
+
 class Payroll(Base):
     __tablename__ = "payrolls"
 
@@ -23,7 +28,12 @@ class Payroll(Base):
     overtime_hours = Column(Numeric(6, 2), default=0)
     overtime_amount = Column(Numeric(12, 2), default=0)
     bonuses = Column(Numeric(12, 2), default=0)
+    commissions = Column(Numeric(12, 2), default=0)
     gross_salary = Column(Numeric(12, 2), nullable=False)
+    payroll_type = Column(SAEnum(PayrollType), default=PayrollType.regular, nullable=False)
+    decimo_accrued_total = Column(Numeric(12, 2), nullable=True)
+    cuatrimestre = Column(Integer, nullable=True)
+    cuatrimestre_year = Column(Integer, nullable=True)
 
     # Deducciones
     social_security = Column(Numeric(12, 2), default=0)

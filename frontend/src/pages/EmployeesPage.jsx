@@ -35,7 +35,8 @@ const emptyForm = {
   position: '', department: '', base_salary: '', weekly_contract_hours: '40',
   works_saturday_half_day: false,
   is_trusted_staff: false,
-  hire_date: '', contract_type: 'indefinido', status: 'activo',
+  hire_date: '', contract_type: 'indefinido', status: 'activo', termination_date: '',
+  vacation_opening_balance: '0',
 }
 
 function employeeToForm(emp) {
@@ -54,6 +55,8 @@ function employeeToForm(emp) {
     hire_date: emp.hire_date ?? '',
     contract_type: emp.contract_type ?? 'indefinido',
     status: emp.status ?? 'activo',
+    termination_date: emp.termination_date ?? '',
+    vacation_opening_balance: String(emp.vacation_opening_balance ?? '0'),
   }
 }
 
@@ -73,6 +76,8 @@ function buildPayload(form) {
     hire_date: form.hire_date,
     contract_type: form.contract_type,
     status: form.status,
+    termination_date: form.termination_date || null,
+    vacation_opening_balance: parseFloat(form.vacation_opening_balance) || 0,
   }
 }
 
@@ -178,6 +183,19 @@ function EmployeeFormFields({ form, field, editing }) {
       <Grid item xs={12} sm={6}>
         <TextField fullWidth label="Fecha ingreso" value={form.hire_date} onChange={e => field('hire_date', e.target.value)} type="date" InputLabelProps={{ shrink: true }} />
       </Grid>
+      {editing && (
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth
+            label="Fecha de cese"
+            value={form.termination_date}
+            onChange={e => field('termination_date', e.target.value)}
+            type="date"
+            InputLabelProps={{ shrink: true }}
+            helperText="Para décimo proporcional. Marca al empleado como inactivo."
+          />
+        </Grid>
+      )}
       <Grid item xs={6}>
         <TextField fullWidth select label="Departamento" value={form.department} onChange={e => field('department', e.target.value)}>
           {DEPARTMENTS.map(d => <MenuItem key={d} value={d}>{d}</MenuItem>)}
@@ -194,6 +212,32 @@ function EmployeeFormFields({ form, field, editing }) {
             {STATUSES.map(s => <MenuItem key={s} value={s} sx={{ textTransform: 'capitalize' }}>{s}</MenuItem>)}
           </TextField>
         </Grid>
+      )}
+      {editing && (
+        <>
+          <Grid item xs={12}>
+            <Typography sx={{
+              fontFamily: '"DM Mono", monospace',
+              fontSize: '0.68rem',
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: COLORS.textMuted,
+              mt: 1,
+            }}>
+              Vacaciones — carga inicial
+            </Typography>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              label="Días acumulados (carga inicial)"
+              value={form.vacation_opening_balance}
+              onChange={e => field('vacation_opening_balance', e.target.value)}
+              type="number"
+              inputProps={{ min: 0, step: 0.01 }}
+            />
+          </Grid>
+        </>
       )}
     </Grid>
   )
@@ -249,7 +293,7 @@ export default function EmployeesPage() {
       if (editing) {
         await employeesApi.update(editing.id, payload)
       } else {
-        const { status, ...createPayload } = payload
+        const { status, vacation_opening_balance, ...createPayload } = payload
         await employeesApi.create(createPayload)
       }
       setOpenForm(false)
