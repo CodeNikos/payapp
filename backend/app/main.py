@@ -1,4 +1,5 @@
 from pathlib import Path
+import asyncio
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,7 +35,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=settings.ALLOWED_ORIGINS if settings.ALLOWED_ORIGINS else ["*"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
     allow_headers=["*"],
@@ -43,9 +44,9 @@ app.add_middleware(
 # Security headers
 app.add_middleware(SecurityHeadersMiddleware)
 
-# Trusted hosts (incluir localhost para healthchecks internos)
-_allowed_hosts = list(settings.ALLOWED_HOSTS)
-for _h in ("localhost", "127.0.0.1"):
+# Trusted hosts: permitir subdominios Seenode + localhost (healthchecks)
+_allowed_hosts = list(settings.ALLOWED_HOSTS or [])
+for _h in ("*", ".seenode.app", "localhost", "127.0.0.1"):
     if _h not in _allowed_hosts:
         _allowed_hosts.append(_h)
 app.add_middleware(
@@ -66,13 +67,12 @@ app.include_router(timesheets.router, prefix="/api/v1/timesheets", tags=["Marcac
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reportería"])
 
 
-@app.on_event("startup")
-async def apply_migrations():
-    """Tablas, migraciones y admin inicial. No tumba el arranque si la DB falla."""
+async def _init_database():
+    """Tablas, migraciones y admin. Corre en background para no bloquear healthcheck."""
     try:
-        await create_tables()
+        await asyncio.wait_for(create_tables(), timeout=20)
         print("OK tablas verificadas", flush=True)
-        await run_migrations()
+        await asyncio.wait_for(run_migrations(), timeout=30)
         print("OK migraciones aplicadas", flush=True)
     except Exception as exc:
         print(f"WARN migraciones al startup: {exc}", flush=True)
@@ -101,6 +101,13 @@ async def apply_migrations():
                 print("OK usuario admin ya existe", flush=True)
     except Exception as exc:
         print(f"WARN seed admin al startup: {exc}", flush=True)
+
+
+@app.on_event("startup")
+async def apply_migrations():
+    # No await: uvicorn debe aceptar /api/health de inmediato
+    asyncio.create_task(_init_database())
+    print("OK startup: init DB en background", flush=True)
 
 
 @app.get("/api/health")
