@@ -14,7 +14,7 @@ import app.models  # noqa: F401 — registra todos los modelos antes de montar r
 from app.routers import auth, users, employees, payroll, holidays, timesheets, reports, companies, absences, settlements
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
-from app.core.database import run_migrations
+from app.core.database import run_migrations, create_tables
 from app.middleware.security import SecurityHeadersMiddleware
 
 limiter = Limiter(key_func=get_remote_address)
@@ -43,10 +43,14 @@ app.add_middleware(
 # Security headers
 app.add_middleware(SecurityHeadersMiddleware)
 
-# Trusted hosts
+# Trusted hosts (incluir localhost para healthchecks internos)
+_allowed_hosts = list(settings.ALLOWED_HOSTS)
+for _h in ("localhost", "127.0.0.1"):
+    if _h not in _allowed_hosts:
+        _allowed_hosts.append(_h)
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=settings.ALLOWED_HOSTS,
+    allowed_hosts=_allowed_hosts,
 )
 
 # Routers
@@ -64,7 +68,39 @@ app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reportería"
 
 @app.on_event("startup")
 async def apply_migrations():
-    await run_migrations()
+    """Tablas, migraciones y admin inicial. No tumba el arranque si la DB falla."""
+    try:
+        await create_tables()
+        print("OK tablas verificadas", flush=True)
+        await run_migrations()
+        print("OK migraciones aplicadas", flush=True)
+    except Exception as exc:
+        print(f"WARN migraciones al startup: {exc}", flush=True)
+        return
+
+    try:
+        from sqlalchemy import select
+        from app.core.database import AsyncSessionLocal
+        from app.core.security import hash_password
+        from app.models.user import User, UserRole
+
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(User).where(User.username == "admin"))
+            if result.scalar_one_or_none() is None:
+                db.add(User(
+                    email="admin@payapp.com",
+                    username="admin",
+                    full_name="Administrador",
+                    role=UserRole.admin,
+                    hashed_password=hash_password("Admin123!"),
+                    is_active=True,
+                ))
+                await db.commit()
+                print("OK usuario admin creado", flush=True)
+            else:
+                print("OK usuario admin ya existe", flush=True)
+    except Exception as exc:
+        print(f"WARN seed admin al startup: {exc}", flush=True)
 
 
 @app.get("/api/health")
