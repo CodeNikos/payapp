@@ -9,8 +9,9 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from app.routers import auth, users, employees, payroll, holidays, timesheets, reports, companies, absences, settlements
 from app.core.config import settings
+import app.models  # noqa: F401 — registra todos los modelos antes de montar routers
+from app.routers import auth, users, employees, payroll, holidays, timesheets, reports, companies, absences, settlements
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 from app.core.database import run_migrations

@@ -41,6 +41,8 @@ async def create_tables():
 
 async def run_migrations():
     """Aplica cambios incrementales en bases de datos existentes."""
+    import app.models  # noqa: F401 — asegura que Settlement/Absence/etc. estén registrados
+
     async with engine.begin() as conn:
         # Migración legacy: monthly_contract_hours → weekly_contract_hours
         await conn.execute(text(
