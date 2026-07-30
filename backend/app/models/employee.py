@@ -67,3 +67,13 @@ class Employee(Base):
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}"
+
+
+# Garantiza que Settlement (y dependencias) estén en el registry de SQLAlchemy
+# siempre que se importe Employee (p. ej. seed.py en el deploy).
+from app.models.settlement import Settlement  # noqa: E402, F401
+from app.models.absence import Absence  # noqa: E402, F401
+from app.models.company import Company  # noqa: E402, F401
+from app.models.vacation_usage import VacationUsage  # noqa: E402, F401
+from app.models.payroll import Payroll  # noqa: E402, F401
+from app.models.timesheet import TimesheetEntry  # noqa: E402, F401

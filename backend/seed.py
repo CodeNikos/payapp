@@ -5,14 +5,8 @@ Ejecutar: python seed.py
 import asyncio
 from app.core.database import create_tables, run_migrations, AsyncSessionLocal
 from app.core.security import hash_password
+import app.models  # noqa: F401 — registra todos los modelos (Settlement, Absence, etc.)
 from app.models.user import User, UserRole
-from app.models.company import Company  # noqa: F401 — registers table with Base (antes de Employee por FK)
-from app.models.employee import Employee  # noqa: F401 — registers table with Base
-from app.models.payroll import Payroll    # noqa: F401 — registers table with Base
-from app.models.holiday import Holiday    # noqa: F401 — registers table with Base
-from app.models.timesheet import TimesheetEntry  # noqa: F401 — registers table with Base
-from app.models.vacation_usage import VacationUsage  # noqa: F401 — registers table with Base
-from app.models.absence import Absence  # noqa: F401 — registers table with Base
 
 
 async def seed():
