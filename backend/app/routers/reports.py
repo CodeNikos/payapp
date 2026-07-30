@@ -16,6 +16,7 @@ from app.schemas.vacation import (
     VacationTakenReportItem,
     VacationTakenReportResponse,
     VacationUsageCreate,
+    VacationUsageUpdate,
     VacationUsageResponse,
     VacationDetailResponse,
 )
@@ -78,6 +79,7 @@ async def vacation_taken_report(
             end_date=end_date,
             days=usage.days,
             amount=usage.amount,
+            base_salary=employee.base_salary,
             notes=usage.notes,
         ))
     if needs_commit:
@@ -194,6 +196,53 @@ async def register_vacation_usage(
         notes=data.notes,
     )
     db.add(usage)
+    await db.commit()
+    await db.refresh(usage)
+    return VacationUsageResponse.model_validate(usage)
+
+
+@router.patch("/vacations/usages/{usage_id}", response_model=VacationUsageResponse)
+async def update_vacation_usage(
+    usage_id: int,
+    data: VacationUsageUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(select(VacationUsage).where(VacationUsage.id == usage_id))
+    usage = result.scalar_one_or_none()
+    if not usage:
+        raise HTTPException(status_code=404, detail="Registro de vacaciones no encontrado")
+
+    emp_result = await db.execute(select(Employee).where(Employee.id == usage.employee_id))
+    employee = emp_result.scalar_one_or_none()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+
+    start_date = data.start_date if data.start_date is not None else usage.start_date
+    days = data.days
+    if days is None and data.end_date is not None:
+        days = _inclusive_days(start_date, data.end_date)
+    if days is None:
+        days = usage.days
+
+    usages = await _get_usages_for_employee(db, usage.employee_id)
+    other_usages = [u for u in usages if u.id != usage.id]
+    balance = compute_vacation_balance(employee, other_usages, start_date)
+
+    if days > balance:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Días solicitados ({days}) superan el saldo disponible ({balance})",
+        )
+
+    usage.start_date = start_date
+    usage.usage_date = start_date
+    usage.days = days
+    usage.end_date = compute_vacation_end_date(start_date, days)
+    usage.amount = compute_vacation_payment(employee.base_salary, days)
+    if data.notes is not None:
+        usage.notes = data.notes.strip() or None
+
     await db.commit()
     await db.refresh(usage)
     return VacationUsageResponse.model_validate(usage)

@@ -9,7 +9,7 @@ import AppAlert from '../components/common/AppAlert'
 import {
   AddOutlined, CheckCircleOutlined, ReceiptLongOutlined,
   BusinessOutlined, GroupsOutlined, SearchOutlined,
-  DeleteOutlined, CancelOutlined,
+  DeleteOutlined, CancelOutlined, FilterListOutlined,
   KeyboardArrowDownOutlined, KeyboardArrowRightOutlined,
 } from '@mui/icons-material'
 import { alpha } from '@mui/material/styles'
@@ -41,6 +41,31 @@ const CUATRIMESTRE_OPTIONS = [
   { value: 2, label: '2.ª cuota — Abr a Jul (pago 15 ago)' },
   { value: 3, label: '3.ª cuota — Ago a Nov (pago 15 dic)' },
 ]
+
+const MONTH_OPTIONS = [
+  { value: 1, label: 'Enero' },
+  { value: 2, label: 'Febrero' },
+  { value: 3, label: 'Marzo' },
+  { value: 4, label: 'Abril' },
+  { value: 5, label: 'Mayo' },
+  { value: 6, label: 'Junio' },
+  { value: 7, label: 'Julio' },
+  { value: 8, label: 'Agosto' },
+  { value: 9, label: 'Septiembre' },
+  { value: 10, label: 'Octubre' },
+  { value: 11, label: 'Noviembre' },
+  { value: 12, label: 'Diciembre' },
+]
+
+const ALL_FILTER = ''
+
+function periodParts(dateStr) {
+  if (!dateStr || typeof dateStr !== 'string' || dateStr.length < 7) return null
+  const year = Number(dateStr.slice(0, 4))
+  const month = Number(dateStr.slice(5, 7))
+  if (!year || !month) return null
+  return { year, month }
+}
 
 function getSuggestedPaymentDate(year, cuatrimestre) {
   const paymentMonths = { 1: 4, 2: 8, 3: 12 }
@@ -339,8 +364,12 @@ export default function PayrollPage() {
   const [expandedId, setExpandedId]     = useState(null)
   const [decimoPreview, setDecimoPreview] = useState(null)
   const [previewLoading, setPreviewLoading] = useState(false)
+  const [filterYear, setFilterYear] = useState(ALL_FILTER)
+  const [filterMonth, setFilterMonth] = useState(ALL_FILTER)
+  const [filterEmployeeId, setFilterEmployeeId] = useState(ALL_FILTER)
 
   const isDecimoMode = form.payroll_type === 'decimo'
+  const hasActiveFilters = filterYear !== ALL_FILTER || filterMonth !== ALL_FILTER || filterEmployeeId !== ALL_FILTER
 
   const activeEmployees = useMemo(
     () => employees.filter(e => e.is_active && e.status === 'activo'),
@@ -356,14 +385,71 @@ export default function PayrollPage() {
     })
   }, [activeEmployees, employeeSearch])
 
+  const filterYearOptions = useMemo(() => {
+    const years = new Set([new Date().getFullYear()])
+    payrolls.forEach((p) => {
+      const parts = periodParts(p.period_start)
+      if (parts) years.add(parts.year)
+      if (p.cuatrimestre_year) years.add(Number(p.cuatrimestre_year))
+    })
+    if (filterYear !== ALL_FILTER) years.add(Number(filterYear))
+    return [...years].sort((a, b) => b - a)
+  }, [payrolls, filterYear])
+
+  const filterEmployeeOptions = useMemo(() => {
+    const byId = new Map()
+    employees.forEach((e) => byId.set(e.id, e))
+    payrolls.forEach((p) => {
+      if (!byId.has(p.employee_id)) {
+        byId.set(p.employee_id, {
+          id: p.employee_id,
+          first_name: `ID ${p.employee_id}`,
+          last_name: '',
+          employee_code: '',
+        })
+      }
+    })
+    return [...byId.values()].sort((a, b) => {
+      const nameA = `${a.first_name} ${a.last_name}`.trim().toLowerCase()
+      const nameB = `${b.first_name} ${b.last_name}`.trim().toLowerCase()
+      return nameA.localeCompare(nameB, 'es')
+    })
+  }, [employees, payrolls])
+
+  const filteredPayrolls = useMemo(() => {
+    return payrolls.filter((p) => {
+      if (filterEmployeeId !== ALL_FILTER && p.employee_id !== Number(filterEmployeeId)) {
+        return false
+      }
+      const parts = periodParts(p.period_start)
+      if (filterYear !== ALL_FILTER) {
+        const year = parts?.year ?? (p.cuatrimestre_year ? Number(p.cuatrimestre_year) : null)
+        if (year !== Number(filterYear)) return false
+      }
+      if (filterMonth !== ALL_FILTER) {
+        if (!parts || parts.month !== Number(filterMonth)) return false
+      }
+      return true
+    })
+  }, [payrolls, filterYear, filterMonth, filterEmployeeId])
+
   const targetCount = isDecimoMode && decimoPreview?.items?.length
     ? (scopeMode === 'company' ? decimoPreview.items.length : selectedIds.filter(id => decimoPreview.items.some(i => i.employee_id === id)).length)
     : (scopeMode === 'company' ? activeEmployees.length : selectedIds.length)
 
+  const clearFilters = () => {
+    setFilterYear(ALL_FILTER)
+    setFilterMonth(ALL_FILTER)
+    setFilterEmployeeId(ALL_FILTER)
+  }
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [pr, er] = await Promise.all([payrollApi.list(), employeesApi.list({ limit: 200 })])
+      const [pr, er] = await Promise.all([
+        payrollApi.list({ limit: 200 }),
+        employeesApi.list({ limit: 200 }),
+      ])
       setPayrolls(pr.data)
       setEmployees(er.data)
     } catch { /* ignore */ }
@@ -660,7 +746,10 @@ export default function PayrollPage() {
         <Box>
           <Typography variant="h4" sx={{ color: COLORS.textPrimary, mb: 0.5 }}>Nóminas</Typography>
           <Typography variant="body2" sx={{ color: COLORS.textSecondary }}>
-            {payrolls.length} registros · clic en una fila para ver el desglose de deducciones
+            {hasActiveFilters
+              ? `${filteredPayrolls.length} de ${payrolls.length} registros`
+              : `${payrolls.length} registros`}
+            {' · '}clic en una fila para ver el desglose de deducciones
           </Typography>
         </Box>
         <Button variant="contained" startIcon={<AddOutlined />} onClick={handleOpenForm} size="small">
@@ -679,6 +768,73 @@ export default function PayrollPage() {
           {actionError}
         </AppAlert>
       )}
+
+      <Box sx={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: 1.5,
+        mb: 2.5,
+        px: 2,
+        py: 1.5,
+        borderRadius: 2.5,
+        bgcolor: COLORS.cardBg,
+        border: `1px solid ${COLORS.borderSubtle}`,
+      }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mr: 0.5 }}>
+          <FilterListOutlined sx={{ color: COLORS.brand, fontSize: 20 }} />
+          <Typography variant="body2" sx={{ color: COLORS.textSecondary, fontWeight: 500 }}>
+            Filtros
+          </Typography>
+        </Box>
+        <TextField
+          select
+          size="small"
+          label="Año"
+          value={filterYear}
+          onChange={(e) => setFilterYear(e.target.value === ALL_FILTER ? ALL_FILTER : Number(e.target.value))}
+          sx={{ minWidth: 110 }}
+        >
+          <MenuItem value={ALL_FILTER}>Todos</MenuItem>
+          {filterYearOptions.map((y) => (
+            <MenuItem key={y} value={y}>{y}</MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Mes"
+          value={filterMonth}
+          onChange={(e) => setFilterMonth(e.target.value === ALL_FILTER ? ALL_FILTER : Number(e.target.value))}
+          sx={{ minWidth: 140 }}
+        >
+          <MenuItem value={ALL_FILTER}>Todos</MenuItem>
+          {MONTH_OPTIONS.map((m) => (
+            <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Empleado"
+          value={filterEmployeeId}
+          onChange={(e) => setFilterEmployeeId(e.target.value === ALL_FILTER ? ALL_FILTER : Number(e.target.value))}
+          sx={{ minWidth: 220, flex: 1 }}
+        >
+          <MenuItem value={ALL_FILTER}>Todos</MenuItem>
+          {filterEmployeeOptions.map((emp) => (
+            <MenuItem key={emp.id} value={emp.id}>
+              {`${emp.first_name} ${emp.last_name}`.trim()}
+              {emp.employee_code ? ` · ${emp.employee_code}` : ''}
+            </MenuItem>
+          ))}
+        </TextField>
+        {hasActiveFilters && (
+          <Button size="small" onClick={clearFilters} sx={{ color: COLORS.textSecondary }}>
+            Limpiar
+          </Button>
+        )}
+      </Box>
 
       <TableContainer component={Paper} sx={{ borderRadius: 3 }}>
         <Table size="small">
@@ -703,7 +859,17 @@ export default function PayrollPage() {
                   <Typography variant="body2" sx={{ color: COLORS.textMuted }}>Sin nóminas generadas</Typography>
                 </TableCell>
               </TableRow>
-            ) : payrolls.map((p) => {
+            ) : filteredPayrolls.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={10} sx={{ textAlign: 'center', py: 6 }}>
+                  <FilterListOutlined sx={{ fontSize: 40, color: COLORS.textMuted, mb: 1, display: 'block', mx: 'auto' }} />
+                  <Typography variant="body2" sx={{ color: COLORS.textMuted, mb: 1.5 }}>
+                    Ninguna nómina coincide con los filtros
+                  </Typography>
+                  <Button size="small" onClick={clearFilters}>Limpiar filtros</Button>
+                </TableCell>
+              </TableRow>
+            ) : filteredPayrolls.map((p) => {
               const emp = employees.find(e => e.id === p.employee_id)
               const hourlyRate = getHourlyRate(emp)
               const overtimeRate = getOvertimeHourlyRate(emp)
@@ -1199,9 +1365,9 @@ export default function PayrollPage() {
                     onChange={e => field('period_end', e.target.value)} InputLabelProps={{ shrink: true }} />
                 </Grid>
                 <Grid item xs={12} sm={4}>
-                  <TextField fullWidth label="Horas extra (confianza)" type="number" value={form.overtime_hours}
+                  <TextField fullWidth label="Horas extras" type="number" value={form.overtime_hours}
                     onChange={e => field('overtime_hours', e.target.value)} inputProps={{ min: 0, step: 0.5 }}
-                    helperText="Solo personal de confianza. Demás: desde marcación (+25% diurno)" />
+                     />
                 </Grid>
                 <Grid item xs={12} sm={4}>
                   <TextField fullWidth label="Bonificaciones" type="number" value={form.bonuses}

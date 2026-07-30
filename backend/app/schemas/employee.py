@@ -21,6 +21,7 @@ class EmployeeBase(BaseModel):
     contract_type: ContractType = ContractType.indefinido
     termination_date: Optional[date] = None
     vacation_opening_balance: Decimal = Field(default=Decimal("0"), ge=0)
+    company_code: Optional[str] = None
 
 
 class EmployeeCreate(EmployeeBase):
@@ -44,6 +45,7 @@ class EmployeeUpdate(BaseModel):
     status: Optional[EmployeeStatus] = None
     termination_date: Optional[date] = None
     vacation_opening_balance: Optional[Decimal] = Field(default=None, ge=0)
+    company_code: Optional[str] = None
 
 
 class EmployeeResponse(EmployeeBase):

@@ -194,19 +194,20 @@ def calculate_decimo(
         and _payroll_overlaps(p, accrual_start, accrual_end)
     ]
 
+    # Extras reales del período (horas extra, bonos, comisiones)
     earnings = aggregate_earnings_from_payrolls(regular_payrolls)
-    covered_ranges = [
-        clipped for p in regular_payrolls
-        if (clipped := _clip_range(p.period_start, p.period_end, accrual_start, accrual_end))
-    ]
-    projected_base = calculate_missing_base_salary(employee, accrual_start, accrual_end, covered_ranges)
+
+    # Base del décimo: salario contractual × meses proporcionales del período
+    # (meses comerciales: días del mes / días del mes). No se usa la suma de
+    # base_salary de nóminas, porque si faltan planillas el décimo queda subestimado.
+    months_factor = _period_proration_factor(accrual_start, accrual_end)
+    base_accrued = (employee.base_salary * months_factor).quantize(Decimal("0.01"))
 
     accrued_total = (
-        earnings["base_salary"]
+        base_accrued
         + earnings["overtime_amount"]
         + earnings["bonuses"]
         + earnings["commissions"]
-        + projected_base
     )
     decimo_amount = (accrued_total / Decimal("12")).quantize(Decimal("0.01"))
 
@@ -216,17 +217,18 @@ def calculate_decimo(
             notes_parts.append(f"Ingreso {employee.hire_date.isoformat()}")
         if employee.termination_date and employee.termination_date < cuatrimestre_end:
             notes_parts.append(f"Cese {employee.termination_date.isoformat()}")
-    if projected_base > 0:
-        notes_parts.append(f"Salario base proyectado: B/. {projected_base}")
+    notes_parts.append(
+        f"Base salarial: B/. {base_accrued} ({months_factor.quantize(Decimal('0.0001'))} meses × B/. {employee.base_salary})"
+    )
 
     return DecimoBreakdown(
         accrual_start=accrual_start,
         accrual_end=accrual_end,
-        base_from_payrolls=earnings["base_salary"],
+        base_from_payrolls=base_accrued,
         overtime_from_payrolls=earnings["overtime_amount"],
         bonuses_from_payrolls=earnings["bonuses"],
         commissions_from_payrolls=earnings["commissions"],
-        projected_base=projected_base,
+        projected_base=Decimal("0.00"),
         accrued_total=accrued_total.quantize(Decimal("0.01")),
         decimo_amount=decimo_amount,
         is_proportional=is_proportional,

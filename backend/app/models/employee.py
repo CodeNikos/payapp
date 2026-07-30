@@ -35,6 +35,7 @@ class Employee(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     employee_code = Column(String(20), unique=True, index=True, nullable=False)
+    company_code = Column(String(20), ForeignKey("companies.company_code"), nullable=True, index=True)
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
     document_id = Column(String(20), unique=True, nullable=False)
@@ -56,9 +57,12 @@ class Employee(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+    company = relationship("Company", back_populates="employees")
     payrolls = relationship("Payroll", back_populates="employee")
     timesheet_entries = relationship("TimesheetEntry", back_populates="employee")
     vacation_usages = relationship("VacationUsage", back_populates="employee")
+    absences = relationship("Absence", back_populates="employee")
+    settlements = relationship("Settlement", back_populates="employee")
 
     @property
     def full_name(self):

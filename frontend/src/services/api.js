@@ -73,6 +73,38 @@ export const employeesApi = {
   create: (data) => api.post('/employees/', data),
   update: (id, data) => api.patch(`/employees/${id}`, data),
   deactivate: (id) => api.delete(`/employees/${id}`),
+  previewSettlement: (id, data) => api.post(`/employees/${id}/settlement/preview`, data),
+  createSettlement: (id, data) => api.post(`/employees/${id}/settlement`, data),
+  listSettlements: (id) => api.get(`/employees/${id}/settlements`),
+  uploadSettlementNotice: (settlementId, file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post(`/employees/settlements/${settlementId}/notice`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+}
+
+export const companiesApi = {
+  list: (params) => api.get('/companies/', { params }),
+  get: (id) => api.get(`/companies/${id}`),
+  create: (data) => api.post('/companies/', data),
+  update: (id, data) => api.patch(`/companies/${id}`, data),
+}
+
+export const absencesApi = {
+  list: (params) => api.get('/absences/', { params }),
+  get: (id) => api.get(`/absences/${id}`),
+  create: (data) => api.post('/absences/', data),
+  update: (id, data) => api.patch(`/absences/${id}`, data),
+  remove: (id) => api.delete(`/absences/${id}`),
+  uploadEvidence: (id, file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post(`/absences/${id}/evidence`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
 }
 
 export const payrollApi = {
@@ -117,5 +149,6 @@ export const reportsApi = {
   vacationsTaken: (params) => api.get('/reports/vacations/taken', { params }),
   vacationDetail: (id, params) => api.get(`/reports/vacations/${id}`, { params }),
   registerVacationUsage: (data) => api.post('/reports/vacations/usages', data),
+  updateVacationUsage: (id, data) => api.patch(`/reports/vacations/usages/${id}`, data),
   deleteVacationUsage: (id) => api.delete(`/reports/vacations/usages/${id}`),
 }

@@ -29,6 +29,7 @@ class VacationTakenReportItem(BaseModel):
     end_date: date
     days: Decimal
     amount: Decimal
+    base_salary: Decimal
     notes: Optional[str] = None
 
 
@@ -49,6 +50,19 @@ class VacationUsageCreate(BaseModel):
             raise ValueError("La fecha de fin debe ser posterior o igual a la fecha de inicio")
         if self.days is None and self.end_date is None:
             raise ValueError("Indica los días de vacaciones o un rango de fechas")
+        return self
+
+
+class VacationUsageUpdate(BaseModel):
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    days: Optional[Decimal] = Field(default=None, gt=0, le=365)
+    notes: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_dates(self):
+        if self.start_date is not None and self.end_date is not None and self.end_date < self.start_date:
+            raise ValueError("La fecha de fin debe ser posterior o igual a la fecha de inicio")
         return self
 
 

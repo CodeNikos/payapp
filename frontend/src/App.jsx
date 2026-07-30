@@ -7,6 +7,8 @@ import EmployeesPage from './pages/EmployeesPage'
 import PayrollPage from './pages/PayrollPage'
 import UsersPage from './pages/UsersPage'
 import HolidaysPage from './pages/HolidaysPage'
+import CompaniesPage from './pages/CompaniesPage'
+import AbsencesPage from './pages/AbsencesPage'
 import TimesheetsPage from './pages/TimesheetsPage'
 import ReportsPage from './pages/ReportsPage'
 import AppLayout from './components/layout/AppLayout'
@@ -31,6 +33,12 @@ export default function App() {
             } />
             <Route path="holidays" element={
               <ProtectedRoute adminOnly><HolidaysPage /></ProtectedRoute>
+            } />
+            <Route path="companies" element={
+              <ProtectedRoute adminOnly><CompaniesPage /></ProtectedRoute>
+            } />
+            <Route path="absences" element={
+              <ProtectedRoute adminOnly><AbsencesPage /></ProtectedRoute>
             } />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

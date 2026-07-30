@@ -62,6 +62,16 @@ from app.services.decimo import (
 
 )
 
+from app.services.absence_payroll import (
+
+    get_pending_salary_absences,
+
+    compute_absence_salary_deduction,
+
+    mark_absences_applied,
+
+)
+
 
 
 router = APIRouter()
@@ -699,6 +709,8 @@ async def create_payroll(
 
 
 
+    pending_absences = []
+
     try:
 
         if data.payroll_type == PayrollType.decimo:
@@ -729,7 +741,35 @@ async def create_payroll(
 
                 )
 
-            calcs = calculate_regular_payroll(employee, data, timesheet_entries, holidays)
+            pending_absences = await get_pending_salary_absences(
+
+                db, data.employee_id, data.period_start, data.period_end
+
+            )
+
+            absence_deduction = compute_absence_salary_deduction(employee, pending_absences)
+
+            payroll_data = data
+
+            if absence_deduction > 0:
+
+                payroll_data = data.model_copy(
+
+                    update={
+
+                        "other_deductions": (data.other_deductions or Decimal("0")) + absence_deduction,
+
+                        "notes": (
+
+                            f"{data.notes}\n" if data.notes else ""
+
+                        ) + f"[Ausencias] Descuento injustificado: ${absence_deduction}",
+
+                    }
+
+                )
+
+            calcs = calculate_regular_payroll(employee, payroll_data, timesheet_entries, holidays)
 
     except ValueError as exc:
 
@@ -756,6 +796,12 @@ async def create_payroll(
     )
 
     db.add(payroll)
+
+    await db.flush()
+
+    if pending_absences:
+
+        await mark_absences_applied(db, pending_absences, payroll.id)
 
     await db.commit()
 

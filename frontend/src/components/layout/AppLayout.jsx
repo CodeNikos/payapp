@@ -1,13 +1,14 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Box, Drawer, List, ListItemButton, ListItemIcon, ListItemText,
-  Typography, Avatar, Divider, IconButton, Tooltip,
+  Typography, Avatar, Divider, IconButton, Tooltip, Collapse,
   useMediaQuery, useTheme as useMuiTheme,
 } from '@mui/material'
 import {
   DashboardOutlined, PeopleOutlined, ReceiptLongOutlined,
   PersonOutlined, Menu as MenuIcon, LogoutOutlined,
   LockOutlined, ChevronLeft, EventOutlined, ScheduleOutlined, AssessmentOutlined,
+  BusinessOutlined, SettingsOutlined, ExpandLess, ExpandMore, EventBusyOutlined,
 } from '@mui/icons-material'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import { useAuthStore } from '../../context/authStore'
@@ -18,13 +19,22 @@ const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED = 68
 
 const navItems = [
-  { label: 'Dashboard',  icon: <DashboardOutlined />,    path: '/dashboard' },
-  { label: 'Empleados',  icon: <PeopleOutlined />,        path: '/employees' },
-  { label: 'Nóminas',    icon: <ReceiptLongOutlined />,   path: '/payroll' },
-  { label: 'Marcación',  icon: <ScheduleOutlined />,      path: '/timesheets' },
-  { label: 'Reportería', icon: <AssessmentOutlined />,    path: '/reports' },
-  { label: 'Días feriados', icon: <EventOutlined />,      path: '/holidays', adminOnly: true },
-  { label: 'Usuarios',   icon: <PersonOutlined />,        path: '/users', adminOnly: true },
+  { label: 'Dashboard',  icon: <DashboardOutlined />,  path: '/dashboard' },
+  { label: 'Empleados',  icon: <PeopleOutlined />,     path: '/employees' },
+  { label: 'Nóminas',    icon: <ReceiptLongOutlined />, path: '/payroll' },
+  { label: 'Marcación',  icon: <ScheduleOutlined />,   path: '/timesheets' },
+  { label: 'Ausencias',  icon: <EventBusyOutlined />,  path: '/absences', adminOnly: true },
+  { label: 'Reportería', icon: <AssessmentOutlined />, path: '/reports' },
+  {
+    label: 'Configuración',
+    icon: <SettingsOutlined />,
+    adminOnly: true,
+    children: [
+      { label: 'Empresas',      icon: <BusinessOutlined />, path: '/companies' },
+      { label: 'Días feriados', icon: <EventOutlined />,    path: '/holidays' },
+      { label: 'Usuarios',      icon: <PersonOutlined />,   path: '/users' },
+    ],
+  },
 ]
 
 export default function AppLayout() {
@@ -35,19 +45,157 @@ export default function AppLayout() {
   const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'))
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [configOpen, setConfigOpen] = useState(false)
 
   const drawerWidth = collapsed ? DRAWER_COLLAPSED : DRAWER_WIDTH
+  const isAdmin = user?.role === 'admin'
+
+  const configPaths = ['/companies', '/holidays', '/users']
+  const configActive = configPaths.some(p => location.pathname.startsWith(p))
+
+  useEffect(() => {
+    if (configActive) setConfigOpen(true)
+  }, [configActive])
 
   const handleLogout = () => {
     logout()
     navigate('/login')
   }
 
-  const filtered = navItems.filter(item => !item.adminOnly || user?.role === 'admin')
+  const goTo = (path) => {
+    navigate(path)
+    if (isMobile) setMobileOpen(false)
+  }
+
+  const filtered = navItems.filter(item => !item.adminOnly || isAdmin)
+
+  const renderNavItem = (item) => {
+    if (item.children) {
+      const childActive = item.children.some(c => location.pathname.startsWith(c.path))
+      return (
+        <Box key={item.label}>
+          <Tooltip title={collapsed ? item.label : ''} placement="right">
+            <ListItemButton
+              selected={childActive && collapsed}
+              onClick={() => {
+                if (collapsed) {
+                  setCollapsed(false)
+                  setConfigOpen(true)
+                  return
+                }
+                setConfigOpen(prev => !prev)
+              }}
+              sx={{
+                mx: 1,
+                px: collapsed ? 1 : 1.5,
+                py: 1,
+                justifyContent: collapsed ? 'center' : 'flex-start',
+                minHeight: 42,
+              }}
+            >
+              <ListItemIcon sx={{
+                minWidth: collapsed ? 0 : 36,
+                color: childActive ? COLORS.textOnDark : COLORS.textSecondaryOnDark,
+              }}>
+                {item.icon}
+              </ListItemIcon>
+              {!collapsed && (
+                <>
+                  <ListItemText
+                    primary={item.label}
+                    primaryTypographyProps={{
+                      fontSize: '0.875rem',
+                      fontWeight: childActive ? 600 : 400,
+                      color: childActive ? COLORS.textOnDark : COLORS.textSecondaryOnDark,
+                    }}
+                  />
+                  {configOpen
+                    ? <ExpandLess sx={{ color: COLORS.textMutedOnDark, fontSize: 18 }} />
+                    : <ExpandMore sx={{ color: COLORS.textMutedOnDark, fontSize: 18 }} />}
+                </>
+              )}
+            </ListItemButton>
+          </Tooltip>
+          {!collapsed && (
+            <Collapse in={configOpen} timeout="auto" unmountOnExit>
+              <List component="div" disablePadding>
+                {item.children.map((child) => {
+                  const active = location.pathname.startsWith(child.path)
+                  return (
+                    <ListItemButton
+                      key={child.path}
+                      selected={active}
+                      onClick={() => goTo(child.path)}
+                      sx={{
+                        mx: 1,
+                        ml: 2,
+                        px: 1.5,
+                        py: 0.85,
+                        minHeight: 38,
+                        borderRadius: 2,
+                      }}
+                    >
+                      <ListItemIcon sx={{
+                        minWidth: 32,
+                        color: active ? COLORS.textOnDark : COLORS.textSecondaryOnDark,
+                      }}>
+                        {child.icon}
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={child.label}
+                        primaryTypographyProps={{
+                          fontSize: '0.82rem',
+                          fontWeight: active ? 600 : 400,
+                          color: active ? COLORS.textOnDark : COLORS.textSecondaryOnDark,
+                        }}
+                      />
+                    </ListItemButton>
+                  )
+                })}
+              </List>
+            </Collapse>
+          )}
+        </Box>
+      )
+    }
+
+    const active = location.pathname.startsWith(item.path)
+    return (
+      <Tooltip key={item.path} title={collapsed ? item.label : ''} placement="right">
+        <ListItemButton
+          selected={active}
+          onClick={() => goTo(item.path)}
+          sx={{
+            mx: 1,
+            px: collapsed ? 1 : 1.5,
+            py: 1,
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            minHeight: 42,
+          }}
+        >
+          <ListItemIcon sx={{
+            minWidth: collapsed ? 0 : 36,
+            color: active ? COLORS.textOnDark : COLORS.textSecondaryOnDark,
+          }}>
+            {item.icon}
+          </ListItemIcon>
+          {!collapsed && (
+            <ListItemText
+              primary={item.label}
+              primaryTypographyProps={{
+                fontSize: '0.875rem',
+                fontWeight: active ? 600 : 400,
+                color: active ? COLORS.textOnDark : COLORS.textSecondaryOnDark,
+              }}
+            />
+          )}
+        </ListItemButton>
+      </Tooltip>
+    )
+  }
 
   const drawerContent = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Logo */}
       <Box sx={{
         p: 2,
         display: 'flex',
@@ -84,39 +232,12 @@ export default function AppLayout() {
 
       <Divider sx={{ borderColor: COLORS.sidebarBorder }} />
 
-      {/* Nav items */}
       <List sx={{ flex: 1, pt: 1, px: 0 }}>
-        {filtered.map((item) => {
-          const active = location.pathname.startsWith(item.path)
-          return (
-            <Tooltip key={item.path} title={collapsed ? item.label : ''} placement="right">
-              <ListItemButton
-                selected={active}
-                onClick={() => { navigate(item.path); if (isMobile) setMobileOpen(false) }}
-                sx={{ mx: 1, px: collapsed ? 1 : 1.5, py: 1, justifyContent: collapsed ? 'center' : 'flex-start', minHeight: 42 }}
-              >
-                <ListItemIcon sx={{ minWidth: collapsed ? 0 : 36, color: active ? COLORS.textOnDark : COLORS.textSecondaryOnDark }}>
-                  {item.icon}
-                </ListItemIcon>
-                {!collapsed && (
-                  <ListItemText
-                    primary={item.label}
-                    primaryTypographyProps={{
-                      fontSize: '0.875rem',
-                      fontWeight: active ? 600 : 400,
-                      color: active ? COLORS.textOnDark : COLORS.textSecondaryOnDark,
-                    }}
-                  />
-                )}
-              </ListItemButton>
-            </Tooltip>
-          )
-        })}
+        {filtered.map(renderNavItem)}
       </List>
 
       <Divider sx={{ borderColor: COLORS.sidebarBorder }} />
 
-      {/* User info */}
       <Box sx={{ p: 1.5 }}>
         {!collapsed ? (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5, borderRadius: 2, background: COLORS.brandDark }}>
@@ -157,7 +278,6 @@ export default function AppLayout() {
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', background: COLORS.pageBg }}>
-      {/* Mobile toggle button */}
       {isMobile && (
         <Box sx={{ position: 'fixed', top: 12, left: 12, zIndex: 1300 }}>
           <IconButton
@@ -169,7 +289,6 @@ export default function AppLayout() {
         </Box>
       )}
 
-      {/* Desktop sidebar */}
       {!isMobile && (
         <Drawer
           variant="permanent"
@@ -184,14 +303,12 @@ export default function AppLayout() {
         </Drawer>
       )}
 
-      {/* Mobile sidebar */}
       {isMobile && (
         <Drawer open={mobileOpen} onClose={() => setMobileOpen(false)} sx={{ '& .MuiDrawer-paper': { width: DRAWER_WIDTH } }}>
           {drawerContent}
         </Drawer>
       )}
 
-      {/* Main content area */}
       <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <Box sx={{ flex: 1, p: { xs: 2, sm: 3, md: 4 }, pt: { xs: 7, md: 4 } }}>
           <Outlet />

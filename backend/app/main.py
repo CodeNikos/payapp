@@ -9,7 +9,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from app.routers import auth, users, employees, payroll, holidays, timesheets, reports
+from app.routers import auth, users, employees, payroll, holidays, timesheets, reports, companies, absences, settlements
 from app.core.config import settings
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
@@ -52,6 +52,9 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Autenticación"])
 app.include_router(users.router, prefix="/api/v1/users", tags=["Usuarios"])
 app.include_router(employees.router, prefix="/api/v1/employees", tags=["Empleados"])
+app.include_router(settlements.router, prefix="/api/v1/employees", tags=["Liquidaciones"])
+app.include_router(companies.router, prefix="/api/v1/companies", tags=["Empresas"])
+app.include_router(absences.router, prefix="/api/v1/absences", tags=["Ausencias"])
 app.include_router(payroll.router, prefix="/api/v1/payroll", tags=["Nómina"])
 app.include_router(holidays.router, prefix="/api/v1/holidays", tags=["Días feriados"])
 app.include_router(timesheets.router, prefix="/api/v1/timesheets", tags=["Marcación"])

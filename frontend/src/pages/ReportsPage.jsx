@@ -3,11 +3,11 @@ import {
   Box, Typography, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Paper, CircularProgress, TextField,
   Tabs, Tab, Button, Dialog, DialogTitle, DialogContent, DialogActions,
-  InputAdornment,
+  InputAdornment, IconButton, Tooltip,
 } from '@mui/material'
 import AppAlert from '../components/common/AppAlert'
 import {
-  SearchOutlined, BeachAccessOutlined, EventNoteOutlined, HistoryOutlined,
+  SearchOutlined, BeachAccessOutlined, EventNoteOutlined, HistoryOutlined, EditOutlined, DeleteOutlined,
 } from '@mui/icons-material'
 import { reportsApi, getApiError } from '../services/api'
 import { COLORS } from '../theme/theme'
@@ -34,10 +34,6 @@ function VacationsReportTab() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
-  const [successMsg, setSuccessMsg] = useState('')
-  const [usageTarget, setUsageTarget] = useState(null)
-  const [usageForm, setUsageForm] = useState({ days: '', start_date: '', notes: '' })
-  const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -66,73 +62,9 @@ function VacationsReportTab() {
   const fmt = (v) => parseFloat(v).toLocaleString('es-PA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const fmtMoney = (v) => `$${parseFloat(v).toLocaleString('es-PA', { minimumFractionDigits: 2 })}`
 
-  const openUsage = (row) => {
-    setUsageTarget(row)
-    setUsageForm({
-      days: '',
-      start_date: asOf || new Date().toISOString().slice(0, 10),
-      notes: '',
-    })
-    setError('')
-  }
-
-  const closeUsage = () => {
-    if (saving) return
-    setUsageTarget(null)
-  }
-
-  const effectiveDays = usageForm.days ? parseFloat(usageForm.days) : null
-  const computedEndDate = effectiveDays
-    ? addVacationDaysToDate(usageForm.start_date, effectiveDays)
-    : ''
-
-  const previewAmount = usageTarget && effectiveDays
-    ? calcPayment(usageTarget.base_salary, effectiveDays)
-    : null
-
-  const handleRegisterUsage = async () => {
-    if (!usageTarget) return
-    const days = usageForm.days ? parseFloat(usageForm.days) : null
-    if (!usageForm.start_date) {
-      setError('Indica la fecha de inicio')
-      return
-    }
-    if (!days || days <= 0) {
-      setError('Indica los días de vacaciones')
-      return
-    }
-    if (days > parseFloat(usageTarget.accumulated_days)) {
-      setError(`Solo hay ${fmt(usageTarget.accumulated_days)} días acumulados`)
-      return
-    }
-
-    setSaving(true)
-    setError('')
-    try {
-      await reportsApi.registerVacationUsage({
-        employee_id: usageTarget.employee_id,
-        start_date: usageForm.start_date,
-        days,
-        notes: usageForm.notes || undefined,
-      })
-      setUsageTarget(null)
-      setSuccessMsg(`Vacaciones registradas para ${usageTarget.employee_name}`)
-      await load()
-    } catch (e) {
-      setError(getApiError(e, 'Error al registrar vacaciones'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
   return (
     <Box>
-      {successMsg && (
-        <AppAlert severity="success" variant="banner" onClose={() => setSuccessMsg('')} sx={{ mb: 2 }}>
-          {successMsg}
-        </AppAlert>
-      )}
-      {error && !usageTarget && (
+      {error && (
         <AppAlert severity="error" variant="banner" onClose={() => setError('')} sx={{ mb: 2 }}>
           {error}
         </AppAlert>
@@ -171,7 +103,7 @@ function VacationsReportTab() {
         <Table size="small">
           <TableHead>
             <TableRow>
-              {['Nombre', 'Cédula', 'Fecha de ingreso', 'Días acumulados', 'Salario base', 'Acciones'].map((h) => (
+              {['Nombre', 'Cédula', 'Fecha de ingreso', 'Días acumulados', 'Salario base'].map((h) => (
                 <TableCell key={h}>{h}</TableCell>
               ))}
             </TableRow>
@@ -179,13 +111,13 @@ function VacationsReportTab() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} sx={{ textAlign: 'center', py: 4 }}>
+                <TableCell colSpan={5} sx={{ textAlign: 'center', py: 4 }}>
                   <CircularProgress size={24} sx={{ color: COLORS.accent }} />
                 </TableCell>
               </TableRow>
             ) : filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} sx={{ textAlign: 'center', py: 6 }}>
+                <TableCell colSpan={5} sx={{ textAlign: 'center', py: 6 }}>
                   <BeachAccessOutlined sx={{ fontSize: 40, color: COLORS.textMuted, mb: 1, display: 'block', mx: 'auto' }} />
                   <Typography variant="body2" sx={{ color: COLORS.textMuted }}>Sin empleados en el reporte</Typography>
                 </TableCell>
@@ -206,95 +138,11 @@ function VacationsReportTab() {
                 <TableCell sx={{ fontFamily: '"DM Mono", monospace', fontSize: '0.8rem' }}>
                   {fmtMoney(row.base_salary)}
                 </TableCell>
-                <TableCell>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={() => openUsage(row)}
-                    disabled={parseFloat(row.accumulated_days) <= 0}
-                  >
-                    Registrar vacaciones
-                  </Button>
-                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </TableContainer>
-
-      <Dialog open={Boolean(usageTarget)} onClose={closeUsage} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
-        <DialogTitle sx={{ fontFamily: '"Syne", sans-serif', pb: 1 }}>
-          Registrar vacaciones
-        </DialogTitle>
-        <DialogContent>
-          {error && usageTarget && <AppAlert severity="error">{error}</AppAlert>}
-          {usageTarget && (
-            <>
-              <Typography variant="body2" sx={{ color: COLORS.textSecondary, mb: 2 }}>
-                <strong>{usageTarget.employee_name}</strong> · Saldo: {fmt(usageTarget.accumulated_days)} días
-              </Typography>
-              <TextField
-                fullWidth
-                label="Fecha inicio"
-                type="date"
-                value={usageForm.start_date}
-                onChange={(e) => setUsageForm((f) => ({ ...f, start_date: e.target.value }))}
-                InputLabelProps={{ shrink: true }}
-                sx={{ mb: 2 }}
-              />
-              <TextField
-                fullWidth
-                label="Días a tomar"
-                type="number"
-                value={usageForm.days}
-                onChange={(e) => setUsageForm((f) => ({ ...f, days: e.target.value }))}
-                inputProps={{ min: 0.01, max: parseFloat(usageTarget.accumulated_days), step: 0.01 }}
-                sx={{ mb: 2 }}
-              />
-              <TextField
-                fullWidth
-                label="Fecha fin"
-                type="date"
-                value={computedEndDate}
-                InputLabelProps={{ shrink: true }}
-                InputProps={{ readOnly: true }}
-                helperText="Calculada: inicio + días de vacaciones"
-                sx={{ mb: 2 }}
-              />
-              <TextField
-                fullWidth
-                label="Notas (opcional)"
-                value={usageForm.notes}
-                onChange={(e) => setUsageForm((f) => ({ ...f, notes: e.target.value }))}
-                multiline
-                rows={2}
-                sx={{ mb: 1 }}
-              />
-              {previewAmount != null && (
-                <Box sx={{
-                  p: 1.5, borderRadius: 2,
-                  bgcolor: COLORS.brandMuted,
-                  border: `1px solid ${alpha(COLORS.brand, 0.2)}`,
-                }}>
-                  <Typography sx={{ fontSize: '0.82rem', color: COLORS.textSecondary }}>Monto estimado a pagar</Typography>
-                  <Typography sx={{ fontFamily: '"DM Mono", monospace', fontWeight: 700, color: COLORS.brand }}>
-                    {fmtMoney(previewAmount)}
-                  </Typography>
-                  <Typography sx={{ fontSize: '0.72rem', color: COLORS.textMuted, mt: 0.5 }}>
-                    {effectiveDays} × ({fmtMoney(usageTarget.base_salary)} ÷ 30)
-                  </Typography>
-                </Box>
-              )}
-            </>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 3 }}>
-          <Button onClick={closeUsage} disabled={saving} sx={{ color: COLORS.textSecondary }}>Cancelar</Button>
-          <Button variant="contained" onClick={handleRegisterUsage} disabled={saving}>
-            {saving ? <CircularProgress size={18} sx={{ color: COLORS.white }} /> : 'Confirmar'}
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   )
 }
@@ -306,6 +154,10 @@ function VacationsTakenReportTab() {
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [error, setError] = useState('')
+  const [successMsg, setSuccessMsg] = useState('')
+  const [editing, setEditing] = useState(null)
+  const [editForm, setEditForm] = useState({ days: '', start_date: '', notes: '' })
+  const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -337,9 +189,81 @@ function VacationsTakenReportTab() {
   const fmt = (v) => parseFloat(v).toLocaleString('es-PA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const fmtMoney = (v) => `$${parseFloat(v).toLocaleString('es-PA', { minimumFractionDigits: 2 })}`
 
+  const openEdit = (row) => {
+    setEditing(row)
+    setEditForm({
+      days: String(row.days ?? ''),
+      start_date: row.start_date || '',
+      notes: row.notes || '',
+    })
+    setError('')
+  }
+
+  const closeEdit = () => {
+    if (saving) return
+    setEditing(null)
+    setError('')
+  }
+
+  const effectiveDays = editForm.days ? parseFloat(editForm.days) : null
+  const computedEndDate = effectiveDays
+    ? addVacationDaysToDate(editForm.start_date, effectiveDays)
+    : ''
+  const previewAmount = editing && effectiveDays
+    ? calcPayment(editing.base_salary, effectiveDays)
+    : null
+
+  const handleSaveEdit = async () => {
+    if (!editing) return
+    const days = editForm.days ? parseFloat(editForm.days) : null
+    if (!editForm.start_date) {
+      setError('Indica la fecha de inicio')
+      return
+    }
+    if (!days || days <= 0) {
+      setError('Indica los días de vacaciones')
+      return
+    }
+
+    setSaving(true)
+    setError('')
+    try {
+      await reportsApi.updateVacationUsage(editing.id, {
+        start_date: editForm.start_date,
+        days,
+        notes: editForm.notes || null,
+      })
+      setEditing(null)
+      setSuccessMsg(`Vacaciones actualizadas para ${editing.employee_name}`)
+      await load()
+    } catch (e) {
+      setError(getApiError(e, 'Error al actualizar vacaciones'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (row) => {
+    if (!confirm(`¿Eliminar las vacaciones de ${row.employee_name} (${fmt(row.days)} días)?`)) return
+    setError('')
+    try {
+      await reportsApi.deleteVacationUsage(row.id)
+      if (editing?.id === row.id) setEditing(null)
+      setSuccessMsg(`Vacaciones eliminadas para ${row.employee_name}`)
+      await load()
+    } catch (e) {
+      setError(getApiError(e, 'Error al eliminar vacaciones'))
+    }
+  }
+
   return (
     <Box>
-      {error && (
+      {successMsg && (
+        <AppAlert severity="success" variant="banner" onClose={() => setSuccessMsg('')} sx={{ mb: 2 }}>
+          {successMsg}
+        </AppAlert>
+      )}
+      {error && !editing && (
         <AppAlert severity="error" variant="banner" onClose={() => setError('')} sx={{ mb: 2 }}>
           {error}
         </AppAlert>
@@ -384,7 +308,7 @@ function VacationsTakenReportTab() {
         <Table size="small">
           <TableHead>
             <TableRow>
-              {['Empleado', 'Cédula', 'Fecha inicio', 'Fecha fin', 'Días', 'Monto pagado'].map((h) => (
+              {['Empleado', 'Cédula', 'Fecha inicio', 'Fecha fin', 'Días', 'Monto pagado', 'Acciones'].map((h) => (
                 <TableCell key={h}>{h}</TableCell>
               ))}
             </TableRow>
@@ -392,13 +316,13 @@ function VacationsTakenReportTab() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} sx={{ textAlign: 'center', py: 4 }}>
+                <TableCell colSpan={7} sx={{ textAlign: 'center', py: 4 }}>
                   <CircularProgress size={24} sx={{ color: COLORS.accent }} />
                 </TableCell>
               </TableRow>
             ) : filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} sx={{ textAlign: 'center', py: 6 }}>
+                <TableCell colSpan={7} sx={{ textAlign: 'center', py: 6 }}>
                   <HistoryOutlined sx={{ fontSize: 40, color: COLORS.textMuted, mb: 1, display: 'block', mx: 'auto' }} />
                   <Typography variant="body2" sx={{ color: COLORS.textMuted }}>Sin vacaciones registradas</Typography>
                 </TableCell>
@@ -415,11 +339,107 @@ function VacationsTakenReportTab() {
                 <TableCell sx={{ fontFamily: '"DM Mono", monospace', fontSize: '0.8rem' }}>
                   {fmtMoney(row.amount)}
                 </TableCell>
+                <TableCell>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+                    <Tooltip title="Editar">
+                      <IconButton
+                        size="small"
+                        onClick={() => openEdit(row)}
+                        sx={{ color: COLORS.textMuted, '&:hover': { color: COLORS.brand } }}
+                      >
+                        <EditOutlined sx={{ fontSize: 16 }} />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Eliminar">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDelete(row)}
+                        sx={{ color: COLORS.textMuted, '&:hover': { color: COLORS.error } }}
+                      >
+                        <DeleteOutlined sx={{ fontSize: 16 }} />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </TableContainer>
+
+      <Dialog open={Boolean(editing)} onClose={closeEdit} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+        <DialogTitle sx={{ fontFamily: '"Syne", sans-serif', pb: 1 }}>
+          Editar vacaciones tomadas
+        </DialogTitle>
+        <DialogContent>
+          {error && editing && <AppAlert severity="error">{error}</AppAlert>}
+          {editing && (
+            <>
+              <Typography variant="body2" sx={{ color: COLORS.textSecondary, mb: 2 }}>
+                <strong>{editing.employee_name}</strong>
+              </Typography>
+              <TextField
+                fullWidth
+                label="Fecha inicio"
+                type="date"
+                value={editForm.start_date}
+                onChange={(e) => setEditForm((f) => ({ ...f, start_date: e.target.value }))}
+                InputLabelProps={{ shrink: true }}
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Días tomados"
+                type="number"
+                value={editForm.days}
+                onChange={(e) => setEditForm((f) => ({ ...f, days: e.target.value }))}
+                inputProps={{ min: 0.01, step: 0.01 }}
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Fecha fin"
+                type="date"
+                value={computedEndDate}
+                InputLabelProps={{ shrink: true }}
+                InputProps={{ readOnly: true }}
+                helperText="Calculada: inicio + días de vacaciones"
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Notas (opcional)"
+                value={editForm.notes}
+                onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
+                multiline
+                rows={2}
+                sx={{ mb: 1 }}
+              />
+              {previewAmount != null && (
+                <Box sx={{
+                  p: 1.5, borderRadius: 2,
+                  bgcolor: COLORS.brandMuted,
+                  border: `1px solid ${alpha(COLORS.brand, 0.2)}`,
+                }}>
+                  <Typography sx={{ fontSize: '0.82rem', color: COLORS.textSecondary }}>Monto recalculado</Typography>
+                  <Typography sx={{ fontFamily: '"DM Mono", monospace', fontWeight: 700, color: COLORS.brand }}>
+                    {fmtMoney(previewAmount)}
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.72rem', color: COLORS.textMuted, mt: 0.5 }}>
+                    {effectiveDays} × ({fmtMoney(editing.base_salary)} ÷ 30)
+                  </Typography>
+                </Box>
+              )}
+            </>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button onClick={closeEdit} disabled={saving} sx={{ color: COLORS.textSecondary }}>Cancelar</Button>
+          <Button variant="contained" onClick={handleSaveEdit} disabled={saving}>
+            {saving ? <CircularProgress size={18} sx={{ color: COLORS.white }} /> : 'Guardar cambios'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }
@@ -446,7 +466,7 @@ export default function ReportsPage() {
             '& .MuiTab-root': { textTransform: 'none', fontWeight: 600, minHeight: 48 },
           }}
         >
-          <Tab icon={<BeachAccessOutlined sx={{ fontSize: 18 }} />} iconPosition="start" label="Vacaciones" />
+          <Tab icon={<BeachAccessOutlined sx={{ fontSize: 18 }} />} iconPosition="start" label="Días acumulados" />
           <Tab icon={<HistoryOutlined sx={{ fontSize: 18 }} />} iconPosition="start" label="Vacaciones tomadas" />
           <Tab icon={<EventNoteOutlined sx={{ fontSize: 18 }} />} iconPosition="start" label="Más reportes" disabled />
         </Tabs>

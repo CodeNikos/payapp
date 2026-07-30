@@ -202,3 +202,147 @@ async def run_migrations():
         await conn.execute(text(
             "CREATE INDEX IF NOT EXISTS ix_vacation_usages_usage_date ON vacation_usages (usage_date)"
         ))
+        await conn.execute(text("""
+            DO $$ BEGIN
+                CREATE TYPE companystatus AS ENUM ('activo', 'cancelado');
+            EXCEPTION
+                WHEN duplicate_object THEN null;
+            END $$
+        """))
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS companies (
+                id SERIAL PRIMARY KEY,
+                company_code VARCHAR(20) NOT NULL UNIQUE,
+                commercial_name VARCHAR(200) NOT NULL,
+                legal_name VARCHAR(200) NOT NULL,
+                ruc VARCHAR(40) NOT NULL UNIQUE,
+                dv VARCHAR(10) NOT NULL,
+                status companystatus NOT NULL DEFAULT 'activo',
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ
+            )
+        """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_companies_company_code ON companies (company_code)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_companies_status ON companies (status)"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE employees "
+            "ADD COLUMN IF NOT EXISTS company_code VARCHAR(20)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_employees_company_code ON employees (company_code)"
+        ))
+        await conn.execute(text("""
+            DO $$ BEGIN
+                ALTER TABLE employees
+                ADD CONSTRAINT fk_employees_company_code
+                FOREIGN KEY (company_code) REFERENCES companies(company_code);
+            EXCEPTION
+                WHEN duplicate_object THEN null;
+            END $$
+        """))
+        await conn.execute(text("""
+            DO $$ BEGIN
+                CREATE TYPE absencetype AS ENUM (
+                    'injustificada', 'incapacidad', 'maternidad', 'paternidad',
+                    'duelo', 'atencion_discapacidad', 'matrimonio', 'otros'
+                );
+            EXCEPTION
+                WHEN duplicate_object THEN null;
+            END $$
+        """))
+        await conn.execute(text("""
+            DO $$ BEGIN
+                CREATE TYPE absencedeductionmode AS ENUM ('salario', 'vacaciones');
+            EXCEPTION
+                WHEN duplicate_object THEN null;
+            END $$
+        """))
+        await conn.execute(text("""
+            DO $$ BEGIN
+                CREATE TYPE absencestatus AS ENUM ('registrada', 'aplicada', 'anulada');
+            EXCEPTION
+                WHEN duplicate_object THEN null;
+            END $$
+        """))
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS absences (
+                id SERIAL PRIMARY KEY,
+                employee_id INTEGER NOT NULL REFERENCES employees(id),
+                absence_type absencetype NOT NULL,
+                start_date DATE NOT NULL,
+                end_date DATE NOT NULL,
+                days NUMERIC(8, 2) NOT NULL,
+                is_justified BOOLEAN NOT NULL DEFAULT FALSE,
+                deduction_mode absencedeductionmode,
+                evidence_url VARCHAR(500),
+                evidence_public_id VARCHAR(255),
+                comments TEXT,
+                vacation_usage_id INTEGER REFERENCES vacation_usages(id),
+                payroll_id INTEGER REFERENCES payrolls(id),
+                status absencestatus NOT NULL DEFAULT 'registrada',
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ
+            )
+        """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_absences_employee_id ON absences (employee_id)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_absences_start_date ON absences (start_date)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_absences_status ON absences (status)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_absences_absence_type ON absences (absence_type)"
+        ))
+
+        # Liquidaciones / cese
+        await conn.execute(text("""
+            DO $$ BEGIN
+                CREATE TYPE settlementreason AS ENUM (
+                    'despido_injustificado', 'despido_justificado', 'renuncia_voluntaria'
+                );
+            EXCEPTION
+                WHEN duplicate_object THEN null;
+            END $$
+        """))
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS settlements (
+                id SERIAL PRIMARY KEY,
+                employee_id INTEGER NOT NULL REFERENCES employees(id),
+                reason settlementreason NOT NULL,
+                termination_date DATE NOT NULL,
+                contract_type VARCHAR(30) NOT NULL,
+                years_of_service NUMERIC(8, 4) NOT NULL DEFAULT 0,
+                weekly_salary NUMERIC(12, 2) NOT NULL DEFAULT 0,
+                base_salary NUMERIC(12, 2) NOT NULL DEFAULT 0,
+                seniority_bonus NUMERIC(12, 2) NOT NULL DEFAULT 0,
+                vacation_days NUMERIC(8, 2) NOT NULL DEFAULT 0,
+                vacation_amount NUMERIC(12, 2) NOT NULL DEFAULT 0,
+                decimo_amount NUMERIC(12, 2) NOT NULL DEFAULT 0,
+                indemnity_amount NUMERIC(12, 2) NOT NULL DEFAULT 0,
+                employer_notice_amount NUMERIC(12, 2) NOT NULL DEFAULT 0,
+                employee_notice_deduction NUMERIC(12, 2) NOT NULL DEFAULT 0,
+                gross_total NUMERIC(12, 2) NOT NULL DEFAULT 0,
+                net_total NUMERIC(12, 2) NOT NULL DEFAULT 0,
+                employer_gave_notice BOOLEAN,
+                employee_gave_notice BOOLEAN,
+                notice_file_url VARCHAR(500),
+                notice_file_public_id VARCHAR(255),
+                notes TEXT,
+                breakdown_json TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ
+            )
+        """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_settlements_employee_id ON settlements (employee_id)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_settlements_termination_date ON settlements (termination_date)"
+        ))

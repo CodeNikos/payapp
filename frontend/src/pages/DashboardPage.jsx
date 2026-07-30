@@ -16,15 +16,33 @@ import { useAuthStore } from '../context/authStore'
 import { employeesApi, payrollApi } from '../services/api'
 import { COLORS } from '../theme/theme'
 
-const mockChartData = [
-  { month: 'Ene', nomina: 45000 },
-  { month: 'Feb', nomina: 47200 },
-  { month: 'Mar', nomina: 46800 },
-  { month: 'Abr', nomina: 49100 },
-  { month: 'May', nomina: 51300 },
-  { month: 'Jun', nomina: 50900 },
-  { month: 'Jul', nomina: 53200 },
-]
+const MONTH_LABELS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+// Suma la nómina neta por mes (YYYY-MM) a partir de las nóminas
+function groupByMonth(payrolls) {
+  const byMonth = new Map()
+  for (const p of payrolls || []) {
+    const ref = p.period_end || p.payment_date || p.period_start
+    if (!ref) continue
+    const key = ref.slice(0, 7) // YYYY-MM
+    byMonth.set(key, (byMonth.get(key) || 0) + parseFloat(p.net_salary || 0))
+  }
+  return byMonth
+}
+
+// Serie ordenada para el gráfico: [{ key, month, year, nomina }]
+function buildChartData(payrolls) {
+  const byMonth = groupByMonth(payrolls)
+  return [...byMonth.keys()].sort().map((key) => {
+    const [year, month] = key.split('-')
+    return {
+      key,
+      month: MONTH_LABELS[parseInt(month, 10) - 1],
+      year: parseInt(year, 10),
+      nomina: byMonth.get(key),
+    }
+  })
+}
 
 function StatCard({ title, value, subtitle, icon, teal, trend, progress }) {
   return (
@@ -131,13 +149,34 @@ function greeting() {
   return 'Buenas noches'
 }
 
+// Cantidad de nóminas generadas en el mes más reciente con datos
+function countPayrollsLastMonth(payrolls) {
+  if (!payrolls?.length) return 0
+  const keys = payrolls
+    .map((p) => (p.period_end || p.payment_date || p.period_start || '').slice(0, 7))
+    .filter(Boolean)
+  if (!keys.length) return 0
+  const lastKey = [...keys].sort().at(-1)
+  return keys.filter((k) => k === lastKey).length
+}
+
+// Crecimiento real: total de nómina neta del último mes con datos vs. el mes previo con datos
+function computeGrowth(chartData) {
+  if (!chartData || chartData.length < 2) return null
+  const current = chartData[chartData.length - 1].nomina
+  const previous = chartData[chartData.length - 2].nomina
+  if (!previous) return null
+  return ((current - previous) / previous) * 100
+}
+
 export default function DashboardPage() {
   const { user } = useAuthStore()
   const muiTheme = useMuiTheme()
   const isMobile  = useMediaQuery(muiTheme.breakpoints.down('sm'))
   const isTablet  = useMediaQuery(muiTheme.breakpoints.down('md'))
   const [loading, setLoading] = useState(true)
-  const [stats, setStats] = useState({ employees: 0, payrolls: 0, totalNomina: 0 })
+  const [stats, setStats] = useState({ employees: 0, payrolls: 0, totalNomina: 0, growth: null, payrollsLastMonth: 0 })
+  const [chartData, setChartData] = useState([])
 
   useEffect(() => {
     const load = async () => {
@@ -148,12 +187,28 @@ export default function DashboardPage() {
         ])
         const payrolls = payRes.data || []
         const total = payrolls.reduce((sum, p) => sum + parseFloat(p.net_salary || 0), 0)
-        setStats({ employees: empRes.data?.length || 0, payrolls: payrolls.length, totalNomina: total })
+        const series = buildChartData(payrolls)
+        setChartData(series)
+        setStats({
+          employees: empRes.data?.length || 0,
+          payrolls: payrolls.length,
+          totalNomina: total,
+          growth: computeGrowth(series),
+          payrollsLastMonth: countPayrollsLastMonth(payrolls),
+        })
       } catch { /* use defaults */ }
       finally { setLoading(false) }
     }
     load()
   }, [])
+
+  const growthLabel = stats.growth == null
+    ? 'N/D'
+    : `${stats.growth >= 0 ? '+' : ''}${stats.growth.toFixed(1)}%`
+
+  const lastMonth = chartData.length ? chartData[chartData.length - 1] : null
+  const chartYears = [...new Set(chartData.map((d) => d.year))]
+  const chartYearLabel = chartYears.length ? chartYears.join(' · ') : new Date().getFullYear()
 
   const cards = [
     {
@@ -162,14 +217,13 @@ export default function DashboardPage() {
       subtitle: 'En nómina actualmente',
       icon: <PeopleOutlined sx={{ fontSize: { xs: 18, sm: 20 } }} />,
       teal: true,
-      progress: 82,
     },
     {
       title: 'Nóminas generadas',
       value: loading ? '—' : stats.payrolls,
-      subtitle: 'Período actual',
+      subtitle: 'Total acumuladas',
       icon: <ReceiptLongOutlined sx={{ fontSize: { xs: 18, sm: 20 } }} />,
-      trend: '+2',
+      trend: !loading && stats.payrollsLastMonth ? `+${stats.payrollsLastMonth}` : undefined,
     },
     {
       title: 'Total nómina',
@@ -180,10 +234,10 @@ export default function DashboardPage() {
     },
     {
       title: 'Crecimiento',
-      value: '+4.5%',
+      value: loading ? '—' : growthLabel,
       subtitle: 'Respecto al mes anterior',
       icon: <TrendingUpOutlined sx={{ fontSize: { xs: 18, sm: 20 } }} />,
-      trend: '+4.5%',
+      trend: !loading && stats.growth != null && stats.growth >= 0 ? growthLabel : undefined,
     },
   ]
 
@@ -275,7 +329,7 @@ export default function DashboardPage() {
                 Evolución de Nómina
               </Typography>
               <Typography variant="caption" sx={{ color: COLORS.textSecondary }}>
-                Total mensual · 2025
+                Total mensual · {chartYearLabel}
               </Typography>
             </Box>
 
@@ -297,7 +351,7 @@ export default function DashboardPage() {
           </Box>
 
           {/* Summary stat above chart */}
-          {!loading && (
+          {!loading && lastMonth && (
             <Box sx={{
               display: 'flex', alignItems: 'center', gap: 2, mb: 2,
               p: { xs: 1.25, sm: 1.5 },
@@ -310,20 +364,39 @@ export default function DashboardPage() {
                   Último mes registrado
                 </Typography>
                 <Typography sx={{ color: COLORS.accent, fontFamily: '"DM Mono", monospace', fontWeight: 700, fontSize: { xs: '1rem', sm: '1.15rem' } }}>
-                  $53,200
+                  ${lastMonth.nomina.toLocaleString('es-PA', { minimumFractionDigits: 2 })}
                 </Typography>
               </Box>
-              <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <ArrowUpwardRounded sx={{ color: COLORS.success, fontSize: '0.9rem' }} />
-                <Typography sx={{ color: COLORS.success, fontFamily: '"DM Mono", monospace', fontSize: '0.8rem', fontWeight: 600 }}>
-                  +4.3%
-                </Typography>
-              </Box>
+              {stats.growth != null && (
+                <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <ArrowUpwardRounded sx={{
+                    color: stats.growth >= 0 ? COLORS.success : COLORS.error,
+                    fontSize: '0.9rem',
+                    transform: stats.growth >= 0 ? 'none' : 'rotate(180deg)',
+                  }} />
+                  <Typography sx={{
+                    color: stats.growth >= 0 ? COLORS.success : COLORS.error,
+                    fontFamily: '"DM Mono", monospace', fontSize: '0.8rem', fontWeight: 600,
+                  }}>
+                    {growthLabel}
+                  </Typography>
+                </Box>
+              )}
             </Box>
           )}
 
+          {!loading && chartData.length === 0 ? (
+            <Box sx={{
+              height: isMobile ? 170 : isTablet ? 210 : 240,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Typography sx={{ color: COLORS.textMuted, fontFamily: '"DM Mono", monospace', fontSize: '0.8rem' }}>
+                Sin nóminas registradas para graficar
+              </Typography>
+            </Box>
+          ) : (
           <ResponsiveContainer width="100%" height={isMobile ? 170 : isTablet ? 210 : 240}>
-            <AreaChart data={mockChartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+            <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
               <defs>
                 <linearGradient id="nomGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%"  stopColor={COLORS.accent} stopOpacity={0.22} />
@@ -357,6 +430,7 @@ export default function DashboardPage() {
               />
             </AreaChart>
           </ResponsiveContainer>
+          )}
         </CardContent>
       </Card>
     </Box>
