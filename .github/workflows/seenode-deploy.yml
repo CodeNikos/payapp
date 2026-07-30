@@ -10,10 +10,34 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Seenode deployment
+      - name: Check Seenode secrets
+        env:
+          SEENODE_API_TOKEN: ${{ secrets.SEENODE_API_TOKEN }}
+          SEENODE_APPLICATION_ID: ${{ secrets.SEENODE_APPLICATION_ID }}
         run: |
-          curl --fail-with-body -X POST \
-            -H "Authorization: Bearer ${{ secrets.SEENODE_API_TOKEN }}" \
+          if [ -z "$SEENODE_API_TOKEN" ]; then
+            echo "::error::Falta el secret SEENODE_API_TOKEN."
+            echo "Configúralo en GitHub → Settings → Secrets and variables → Actions"
+            echo "Token: Seenode → User API / Account API token"
+            exit 1
+          fi
+          if [ -z "$SEENODE_APPLICATION_ID" ]; then
+            echo "::error::Falta el secret SEENODE_APPLICATION_ID."
+            echo "Usa el ID de la app (ej. web-zd9t1hro6ljz o el UUID de la URL en Seenode)."
+            exit 1
+          fi
+          echo "Secrets presentes. Application ID length: ${#SEENODE_APPLICATION_ID}"
+
+      - name: Trigger Seenode deployment
+        env:
+          SEENODE_API_TOKEN: ${{ secrets.SEENODE_API_TOKEN }}
+          SEENODE_APPLICATION_ID: ${{ secrets.SEENODE_APPLICATION_ID }}
+        run: |
+          echo "Triggering deploy for SHA ${{ github.sha }}"
+          curl --fail-with-body -sS -X POST \
+            -H "Authorization: Bearer ${SEENODE_API_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "{\"gitCommitSha\": \"${{ github.sha }}\"}" \
-            "https://api.seenode.com/v1/applications/${{ secrets.SEENODE_APPLICATION_ID }}/deployments"
+            "https://api.seenode.com/v1/applications/${SEENODE_APPLICATION_ID}/deployments"
+          echo
+          echo "Deploy trigger OK"
