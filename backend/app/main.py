@@ -12,7 +12,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
 import app.models  # noqa: F401 — registra todos los modelos antes de montar routers
-from app.routers import auth, users, employees, payroll, holidays, timesheets, reports, companies, absences, settlements
+from app.routers import auth, users, employees, payroll, holidays, timesheets, reports, companies, absences, settlements, recurring_deductions
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 from app.core.database import run_migrations, create_tables
@@ -65,7 +65,11 @@ app.include_router(payroll.router, prefix="/api/v1/payroll", tags=["Nómina"])
 app.include_router(holidays.router, prefix="/api/v1/holidays", tags=["Días feriados"])
 app.include_router(timesheets.router, prefix="/api/v1/timesheets", tags=["Marcación"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reportería"])
-
+app.include_router(
+    recurring_deductions.router,
+    prefix="/api/v1/recurring-deductions",
+    tags=["Descuentos recurrentes"],
+)
 
 async def _init_database():
     """Tablas, migraciones y admin. Corre en background para no bloquear healthcheck."""

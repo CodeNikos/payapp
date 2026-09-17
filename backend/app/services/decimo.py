@@ -93,15 +93,23 @@ def aggregate_earnings_from_payrolls(payrolls: list[Payroll]) -> dict[str, Decim
     overtime = Decimal("0")
     bonuses = Decimal("0")
     commissions = Decimal("0")
+    extras = Decimal("0")
     for p in payrolls:
         base += p.base_salary or Decimal("0")
         overtime += p.overtime_amount or Decimal("0")
         bonuses += p.bonuses or Decimal("0")
         commissions += p.commissions or Decimal("0")
+        extras += (
+            (getattr(p, "fuel_allowance", None) or Decimal("0"))
+            + (getattr(p, "meal_allowance", None) or Decimal("0"))
+            + (getattr(p, "salary_in_kind", None) or Decimal("0"))
+            + (getattr(p, "travel_allowance", None) or Decimal("0"))
+            + (getattr(p, "representation_expense", None) or Decimal("0"))
+        )
     return {
         "base_salary": base.quantize(Decimal("0.01")),
         "overtime_amount": overtime.quantize(Decimal("0.01")),
-        "bonuses": bonuses.quantize(Decimal("0.01")),
+        "bonuses": (bonuses + extras).quantize(Decimal("0.01")),
         "commissions": commissions.quantize(Decimal("0.01")),
     }
 

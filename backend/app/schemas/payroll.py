@@ -1,8 +1,20 @@
-from pydantic import BaseModel, model_validator, Field
-from typing import Optional, List
+from pydantic import BaseModel, model_validator, Field, field_validator
+from typing import Optional, List, Any
 from datetime import date, datetime
 from decimal import Decimal
+import json
 from app.models.payroll import PayrollStatus, PayrollType
+
+
+class DeductionItemInput(BaseModel):
+    concept: str = Field(..., min_length=1, max_length=200)
+    amount: Decimal = Field(..., gt=0)
+
+
+class DeductionItem(BaseModel):
+    concept: str
+    amount: Decimal
+    source: str = "manual"
 
 
 class PayrollCreate(BaseModel):
@@ -13,7 +25,13 @@ class PayrollCreate(BaseModel):
     overtime_hours: Decimal = Decimal("0")
     bonuses: Decimal = Decimal("0")
     commissions: Decimal = Decimal("0")
+    fuel_allowance: Decimal = Decimal("0")
+    meal_allowance: Decimal = Decimal("0")
+    salary_in_kind: Decimal = Decimal("0")
+    travel_allowance: Decimal = Decimal("0")
+    representation_expense: Decimal = Decimal("0")
     other_deductions: Decimal = Decimal("0")
+    other_deduction_items: Optional[List[DeductionItemInput]] = None
     notes: Optional[str] = None
     cuatrimestre: Optional[int] = Field(default=None, ge=1, le=3)
     cuatrimestre_year: Optional[int] = Field(default=None, ge=2000, le=2100)
@@ -29,6 +47,9 @@ class PayrollCreate(BaseModel):
         if self.payroll_type == PayrollType.decimo:
             if self.cuatrimestre is None or self.cuatrimestre_year is None:
                 raise ValueError("cuatrimestre y cuatrimestre_year son requeridos para nómina de décimo")
+        if self.other_deduction_items:
+            total = sum((i.amount for i in self.other_deduction_items), Decimal("0"))
+            self.other_deductions = total.quantize(Decimal("0.01"))
         return self
 
 
@@ -47,6 +68,11 @@ class PayrollResponse(BaseModel):
     overtime_amount: Decimal
     bonuses: Decimal
     commissions: Decimal
+    fuel_allowance: Decimal = Decimal("0")
+    meal_allowance: Decimal = Decimal("0")
+    salary_in_kind: Decimal = Decimal("0")
+    travel_allowance: Decimal = Decimal("0")
+    representation_expense: Decimal = Decimal("0")
     gross_salary: Decimal
     decimo_accrued_total: Optional[Decimal] = None
     cuatrimestre: Optional[int] = None
@@ -55,6 +81,7 @@ class PayrollResponse(BaseModel):
     educational_insurance: Decimal
     income_tax: Decimal
     other_deductions: Decimal
+    deduction_items: List[DeductionItem] = []
     total_deductions: Decimal
     net_salary: Decimal
     status: PayrollStatus
@@ -63,6 +90,21 @@ class PayrollResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_validator("deduction_items", mode="before")
+    @classmethod
+    def parse_deduction_items(cls, v: Any):
+        if v is None or v == "":
+            return []
+        if isinstance(v, list):
+            return v
+        if isinstance(v, str):
+            try:
+                data = json.loads(v)
+                return data if isinstance(data, list) else []
+            except json.JSONDecodeError:
+                return []
+        return []
 
 
 class DecimoPreviewRequest(BaseModel):

@@ -156,7 +156,7 @@ export default function UsersPage() {
         </Button>
       </Box>
 
-      <TableContainer component={Paper} sx={{ borderRadius: 3 }}>
+      <TableContainer component={Paper} sx={{ borderRadius: 1 }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -211,7 +211,7 @@ export default function UsersPage() {
         maxWidth="sm"
         fullWidth
         scroll="body"
-        PaperProps={{ sx: { borderRadius: 3, overflow: 'visible' } }}
+        PaperProps={{ sx: { borderRadius: 1, overflow: 'visible' } }}
       >
         <DialogTitle sx={{ pb: 1, pt: 2.5, px: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>

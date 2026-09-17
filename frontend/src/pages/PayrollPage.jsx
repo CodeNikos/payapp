@@ -11,6 +11,7 @@ import {
   BusinessOutlined, GroupsOutlined, SearchOutlined,
   DeleteOutlined, CancelOutlined, FilterListOutlined,
   KeyboardArrowDownOutlined, KeyboardArrowRightOutlined,
+  RemoveCircleOutlineOutlined,
 } from '@mui/icons-material'
 import { alpha } from '@mui/material/styles'
 import { payrollApi, employeesApi, getApiError } from '../services/api'
@@ -98,7 +99,12 @@ const emptyForm = {
   overtime_hours: '0',
   bonuses: '0',
   commissions: '0',
-  other_deductions: '0',
+  fuel_allowance: '0',
+  meal_allowance: '0',
+  salary_in_kind: '0',
+  travel_allowance: '0',
+  representation_expense: '0',
+  other_deduction_items: [],
   notes: '',
 }
 
@@ -184,7 +190,10 @@ function ScopeOptionCard({ option, selected, onSelect }) {
 }
 
 function DeductionBreakdown({ payroll, fmt }) {
-  const other = parseFloat(payroll.other_deductions) || 0
+  const items = Array.isArray(payroll.deduction_items) ? payroll.deduction_items : []
+  const other = items.length > 0
+    ? items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0)
+    : (parseFloat(payroll.other_deductions) || 0)
   const legalTotal = parseFloat(payroll.total_deductions) || 0
   const grandTotal = legalTotal + other
   const isDecimo = payroll.payroll_type === 'decimo'
@@ -207,6 +216,11 @@ function DeductionBreakdown({ payroll, fmt }) {
     { label: 'Horas extra', value: payroll.overtime_amount },
     { label: 'Bonificaciones', value: payroll.bonuses },
     { label: 'Comisiones', value: payroll.commissions },
+    { label: 'Combustible', value: payroll.fuel_allowance ?? 0 },
+    { label: 'Dieta', value: payroll.meal_allowance ?? 0 },
+    { label: 'Salario en especie', value: payroll.salary_in_kind ?? 0 },
+    { label: 'Viáticos', value: payroll.travel_allowance ?? 0 },
+    { label: 'Gasto de representación', value: payroll.representation_expense ?? 0 },
     { label: 'Salario bruto', value: payroll.gross_salary, highlight: true },
   ]
 
@@ -272,7 +286,6 @@ function DeductionBreakdown({ payroll, fmt }) {
                 alignItems: 'center',
                 py: 0.75,
                 borderBottom: `1px dashed ${alpha(COLORS.borderSubtle, 0.8)}`,
-                '&:last-of-type': { borderBottom: other > 0 ? `1px dashed ${alpha(COLORS.borderSubtle, 0.8)}` : 'none' },
               }}
             >
               <Typography sx={{ fontSize: '0.8125rem', color: COLORS.textSecondary }}>
@@ -288,7 +301,30 @@ function DeductionBreakdown({ payroll, fmt }) {
               </Typography>
             </Box>
           ))}
-          {other > 0 && (
+          {items.length > 0 ? items.map((item, idx) => (
+            <Box
+              key={`${item.concept}-${idx}`}
+              sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                py: 0.75,
+                borderBottom: idx < items.length - 1 ? `1px dashed ${alpha(COLORS.borderSubtle, 0.8)}` : 'none',
+              }}
+            >
+              <Typography sx={{ fontSize: '0.8125rem', color: COLORS.textSecondary }}>
+                {item.concept}
+                {item.source && item.source !== 'manual' && (
+                  <Typography component="span" sx={{ ml: 0.75, fontSize: '0.72rem', color: COLORS.textMuted }}>
+                    ({item.source === 'recurring' ? 'recurrente' : item.source === 'absence' ? 'ausencia' : item.source})
+                  </Typography>
+                )}
+              </Typography>
+              <Typography sx={{ fontFamily: '"DM Mono", monospace', fontSize: '0.8125rem', color: COLORS.error, fontWeight: 600 }}>
+                {fmt(item.amount)}
+              </Typography>
+            </Box>
+          )) : other > 0 && (
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.75 }}>
               <Typography sx={{ fontSize: '0.8125rem', color: COLORS.textSecondary }}>
                 Otras deducciones
@@ -590,6 +626,12 @@ export default function PayrollPage() {
       const employee_id = targetIds[i]
       setSaveProgress({ current: i + 1, total: targetIds.length })
       try {
+        const manualItems = (form.other_deduction_items || [])
+          .filter(i => i.concept?.trim() && parseFloat(i.amount) > 0)
+          .map(i => ({
+            concept: i.concept.trim(),
+            amount: parseFloat(i.amount),
+          }))
         const payload = isDecimoMode
           ? {
               employee_id,
@@ -597,7 +639,7 @@ export default function PayrollPage() {
               cuatrimestre_year: parseInt(form.cuatrimestre_year, 10),
               cuatrimestre: parseInt(form.cuatrimestre, 10),
               payment_date: form.payment_date,
-              other_deductions: parseFloat(form.other_deductions) || 0,
+              other_deduction_items: manualItems.length ? manualItems : undefined,
               notes: form.notes || undefined,
             }
           : {
@@ -608,7 +650,12 @@ export default function PayrollPage() {
               overtime_hours: parseFloat(form.overtime_hours) || 0,
               bonuses: parseFloat(form.bonuses) || 0,
               commissions: parseFloat(form.commissions) || 0,
-              other_deductions: parseFloat(form.other_deductions) || 0,
+              fuel_allowance: parseFloat(form.fuel_allowance) || 0,
+              meal_allowance: parseFloat(form.meal_allowance) || 0,
+              salary_in_kind: parseFloat(form.salary_in_kind) || 0,
+              travel_allowance: parseFloat(form.travel_allowance) || 0,
+              representation_expense: parseFloat(form.representation_expense) || 0,
+              other_deduction_items: manualItems.length ? manualItems : undefined,
               notes: form.notes || undefined,
             }
         await payrollApi.create(payload)
@@ -734,6 +781,29 @@ export default function PayrollPage() {
       return next
     })
   }
+
+  const addDeductionItem = () => {
+    setForm(prev => ({
+      ...prev,
+      other_deduction_items: [...(prev.other_deduction_items || []), { concept: '', amount: '' }],
+    }))
+  }
+
+  const updateDeductionItem = (index, key, value) => {
+    setForm(prev => {
+      const items = [...(prev.other_deduction_items || [])]
+      items[index] = { ...items[index], [key]: value }
+      return { ...prev, other_deduction_items: items }
+    })
+  }
+
+  const removeDeductionItem = (index) => {
+    setForm(prev => ({
+      ...prev,
+      other_deduction_items: (prev.other_deduction_items || []).filter((_, i) => i !== index),
+    }))
+  }
+
   const toggleExpand = (id) => setExpandedId(prev => (prev === id ? null : id))
 
   const canSubmit = isDecimoMode
@@ -777,7 +847,7 @@ export default function PayrollPage() {
         mb: 2.5,
         px: 2,
         py: 1.5,
-        borderRadius: 2.5,
+        borderRadius: 1,
         bgcolor: COLORS.cardBg,
         border: `1px solid ${COLORS.borderSubtle}`,
       }}>
@@ -836,7 +906,7 @@ export default function PayrollPage() {
         )}
       </Box>
 
-      <TableContainer component={Paper} sx={{ borderRadius: 3 }}>
+      <TableContainer component={Paper} sx={{ borderRadius: 1 }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -1007,7 +1077,7 @@ export default function PayrollPage() {
         onClose={handleCloseReject}
         maxWidth="xs"
         fullWidth
-        PaperProps={{ sx: { borderRadius: 3 } }}
+        PaperProps={{ sx: { borderRadius: 1 } }}
       >
         <DialogTitle sx={{ fontFamily: '"Syne", sans-serif', pb: 1 }}>
           Rechazar nómina
@@ -1055,7 +1125,7 @@ export default function PayrollPage() {
         onClose={handleCloseDelete}
         maxWidth="xs"
         fullWidth
-        PaperProps={{ sx: { borderRadius: 3 } }}
+        PaperProps={{ sx: { borderRadius: 1 } }}
       >
         <DialogTitle sx={{ fontFamily: '"Syne", sans-serif', pb: 1 }}>
           Eliminar nómina
@@ -1098,7 +1168,7 @@ export default function PayrollPage() {
         maxWidth="sm"
         fullWidth
         scroll="body"
-        PaperProps={{ sx: { borderRadius: 3, overflow: 'visible' } }}
+        PaperProps={{ sx: { borderRadius: 1, overflow: 'visible' } }}
       >
         <DialogTitle sx={{ pb: 1, pt: 2.5, px: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -1311,10 +1381,6 @@ export default function PayrollPage() {
                     onChange={e => field('payment_date', e.target.value)} InputLabelProps={{ shrink: true }}
                     helperText="Sugerido: 15 abr, 15 ago o 15 dic" />
                 </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField fullWidth label="Otras deducciones" type="number" value={form.other_deductions}
-                    onChange={e => field('other_deductions', e.target.value)} inputProps={{ min: 0, step: 0.01 }} />
-                </Grid>
                 <Grid item xs={12}>
                   <Button
                     variant="outlined"
@@ -1378,11 +1444,79 @@ export default function PayrollPage() {
                     onChange={e => field('commissions', e.target.value)} inputProps={{ min: 0, step: 0.01 }} />
                 </Grid>
                 <Grid item xs={12} sm={4}>
-                  <TextField fullWidth label="Otras deducciones" type="number" value={form.other_deductions}
-                    onChange={e => field('other_deductions', e.target.value)} inputProps={{ min: 0, step: 0.01 }} />
+                  <TextField fullWidth label="Combustible" type="number" value={form.fuel_allowance}
+                    onChange={e => field('fuel_allowance', e.target.value)} inputProps={{ min: 0, step: 0.01 }} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth label="Dieta" type="number" value={form.meal_allowance}
+                    onChange={e => field('meal_allowance', e.target.value)} inputProps={{ min: 0, step: 0.01 }} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth label="Salario en especie" type="number" value={form.salary_in_kind}
+                    onChange={e => field('salary_in_kind', e.target.value)} inputProps={{ min: 0, step: 0.01 }} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth label="Viáticos" type="number" value={form.travel_allowance}
+                    onChange={e => field('travel_allowance', e.target.value)} inputProps={{ min: 0, step: 0.01 }} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth label="Gasto de representación" type="number" value={form.representation_expense}
+                    onChange={e => field('representation_expense', e.target.value)} inputProps={{ min: 0, step: 0.01 }} />
                 </Grid>
               </>
             )}
+            <Grid item xs={12}>
+              <Box sx={{
+                p: 1.5,
+                borderRadius: 2,
+                border: `1px solid ${COLORS.borderSubtle}`,
+                bgcolor: alpha(COLORS.error, 0.03),
+              }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+                  <Typography sx={{ fontWeight: 600, fontSize: '0.875rem', color: COLORS.textPrimary }}>
+                    Otras deducciones (concepto + monto)
+                  </Typography>
+                  <Button size="small" startIcon={<AddOutlined />} onClick={addDeductionItem}>
+                    Agregar
+                  </Button>
+                </Box>
+                {(form.other_deduction_items || []).length === 0 ? (
+                  <Typography sx={{ fontSize: '0.8rem', color: COLORS.textMuted }}>
+                    Opcional. Los descuentos recurrentes del empleado se aplican automáticamente en nómina regular.
+                  </Typography>
+                ) : (
+                  (form.other_deduction_items || []).map((item, idx) => (
+                    <Grid container spacing={1} key={idx} sx={{ mb: 1 }} alignItems="center">
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="Concepto"
+                          value={item.concept}
+                          onChange={e => updateDeductionItem(idx, 'concept', e.target.value)}
+                        />
+                      </Grid>
+                      <Grid item xs={10} sm={5}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="Monto"
+                          type="number"
+                          value={item.amount}
+                          onChange={e => updateDeductionItem(idx, 'amount', e.target.value)}
+                          inputProps={{ min: 0, step: 0.01 }}
+                        />
+                      </Grid>
+                      <Grid item xs={2} sm={1}>
+                        <IconButton size="small" onClick={() => removeDeductionItem(idx)} aria-label="Quitar">
+                          <RemoveCircleOutlineOutlined fontSize="small" />
+                        </IconButton>
+                      </Grid>
+                    </Grid>
+                  ))
+                )}
+              </Box>
+            </Grid>
             <Grid item xs={12}>
               <TextField fullWidth label="Notas (opcional)" value={form.notes}
                 onChange={e => field('notes', e.target.value)} multiline rows={2} />

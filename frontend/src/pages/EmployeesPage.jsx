@@ -51,7 +51,8 @@ function effectiveWeeklyHours(employeeOrForm) {
 }
 
 const emptyForm = {
-  first_name: '', last_name: '', document_id: '', email: '', phone: '',
+  first_name: '', last_name: '', document_id: '', document_type: 'cedula',
+  social_security_number: '', email: '', phone: '',
   position: '', department: '', base_salary: '', weekly_contract_hours: '40',
   works_saturday_half_day: false,
   is_trusted_staff: false,
@@ -91,6 +92,8 @@ function employeeToForm(emp) {
     first_name: emp.first_name ?? '',
     last_name: emp.last_name ?? '',
     document_id: emp.document_id ?? '',
+    document_type: emp.document_type ?? 'cedula',
+    social_security_number: emp.social_security_number ?? '',
     email: emp.email ?? '',
     phone: emp.phone ?? '',
     position: emp.position ?? '',
@@ -113,6 +116,8 @@ function buildPayload(form) {
     first_name: form.first_name,
     last_name: form.last_name,
     document_id: form.document_id,
+    document_type: form.document_type || 'cedula',
+    social_security_number: form.social_security_number?.trim() || null,
     email: form.email || null,
     phone: form.phone || null,
     position: form.position,
@@ -164,7 +169,35 @@ function EmployeeFormFields({ form, field, editing, companies = [] }) {
       </Grid>
       <Grid item xs={6}><TextField fullWidth label="Nombre" value={form.first_name} onChange={e => field('first_name', e.target.value)} /></Grid>
       <Grid item xs={6}><TextField fullWidth label="Apellido" value={form.last_name} onChange={e => field('last_name', e.target.value)} /></Grid>
-      <Grid item xs={6}><TextField fullWidth label="Cédula / Doc." value={form.document_id} onChange={e => field('document_id', e.target.value)} /></Grid>
+      <Grid item xs={6}>
+        <TextField
+          fullWidth
+          select
+          label="Tipo de documento"
+          value={form.document_type}
+          onChange={e => field('document_type', e.target.value)}
+        >
+          <MenuItem value="cedula">Cédula</MenuItem>
+          <MenuItem value="pasaporte">Pasaporte</MenuItem>
+        </TextField>
+      </Grid>
+      <Grid item xs={6}>
+        <TextField
+          fullWidth
+          label={form.document_type === 'pasaporte' ? 'Pasaporte' : 'Cédula'}
+          value={form.document_id}
+          onChange={e => field('document_id', e.target.value)}
+        />
+      </Grid>
+      <Grid item xs={6}>
+        <TextField
+          fullWidth
+          label="Número de Seguro Social"
+          value={form.social_security_number}
+          onChange={e => field('social_security_number', e.target.value)}
+          helperText="Requerido para el reporte SIPE"
+        />
+      </Grid>
       <Grid item xs={6}><TextField fullWidth label="Correo" value={form.email} onChange={e => field('email', e.target.value)} type="email" /></Grid>
       <Grid item xs={6}><TextField fullWidth label="Teléfono" value={form.phone} onChange={e => field('phone', e.target.value)} /></Grid>
       <Grid item xs={6}><TextField fullWidth label="Cargo" value={form.position} onChange={e => field('position', e.target.value)} /></Grid>
@@ -671,7 +704,7 @@ export default function EmployeesPage() {
         />
       </Box>
 
-      <TableContainer component={Paper} sx={{ borderRadius: 3 }}>
+      <TableContainer component={Paper} sx={{ borderRadius: 1 }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -762,7 +795,7 @@ export default function EmployeesPage() {
         </Table>
       </TableContainer>
 
-      <Dialog open={openForm} onClose={handleCloseForm} maxWidth="sm" fullWidth scroll="body" PaperProps={{ sx: { borderRadius: 3 } }}>
+      <Dialog open={openForm} onClose={handleCloseForm} maxWidth="sm" fullWidth scroll="body" PaperProps={{ sx: { borderRadius: 1 } }}>
         <DialogTitle sx={{ fontFamily: '"Syne", sans-serif', pb: 1 }}>
           {editing ? 'Editar empleado' : 'Nuevo empleado'}
         </DialogTitle>
@@ -788,7 +821,7 @@ export default function EmployeesPage() {
         maxWidth="sm"
         fullWidth
         scroll="body"
-        PaperProps={{ sx: { borderRadius: 3 } }}
+        PaperProps={{ sx: { borderRadius: 1 } }}
       >
         <DialogTitle sx={{ fontFamily: '"Syne", sans-serif', pb: 1 }}>
           Calcular cese / liquidación
@@ -1003,7 +1036,7 @@ export default function EmployeesPage() {
         maxWidth="xs"
         fullWidth
         scroll="body"
-        PaperProps={{ sx: { borderRadius: 3 } }}
+        PaperProps={{ sx: { borderRadius: 1 } }}
       >
         <DialogTitle sx={{ fontFamily: '"Syne", sans-serif', pb: 1 }}>
           Registrar vacaciones

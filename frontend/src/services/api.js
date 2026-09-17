@@ -151,4 +151,13 @@ export const reportsApi = {
   registerVacationUsage: (data) => api.post('/reports/vacations/usages', data),
   updateVacationUsage: (id, data) => api.patch(`/reports/vacations/usages/${id}`, data),
   deleteVacationUsage: (id) => api.delete(`/reports/vacations/usages/${id}`),
+  sipePreview: (params) => api.get('/reports/sipe/preview', { params }),
+  sipeDownload: (params) => api.get('/reports/sipe', { params, responseType: 'blob' }),
+}
+
+export const recurringDeductionsApi = {
+  list: (params) => api.get('/recurring-deductions/', { params }),
+  create: (data) => api.post('/recurring-deductions/', data),
+  update: (id, data) => api.patch(`/recurring-deductions/${id}`, data),
+  remove: (id) => api.delete(`/recurring-deductions/${id}`),
 }

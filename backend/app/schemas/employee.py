@@ -2,13 +2,15 @@ from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from datetime import date, datetime
 from decimal import Decimal
-from app.models.employee import EmployeeStatus, ContractType
+from app.models.employee import EmployeeStatus, ContractType, DocumentType
 
 
 class EmployeeBase(BaseModel):
     first_name: str
     last_name: str
     document_id: str
+    document_type: DocumentType = DocumentType.cedula
+    social_security_number: Optional[str] = None
     email: Optional[EmailStr] = None
     phone: Optional[str] = None
     position: str
@@ -32,6 +34,8 @@ class EmployeeUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     document_id: Optional[str] = None
+    document_type: Optional[DocumentType] = None
+    social_security_number: Optional[str] = None
     email: Optional[EmailStr] = None
     phone: Optional[str] = None
     position: Optional[str] = None

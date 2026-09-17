@@ -275,7 +275,7 @@ export default function HolidaysPage() {
         gap: 2,
         mb: 3,
         p: 2,
-        borderRadius: 3,
+        borderRadius: 1,
         bgcolor: COLORS.cardBg,
         border: `1px solid ${COLORS.borderSubtle}`,
       }}>
@@ -311,7 +311,7 @@ export default function HolidaysPage() {
         </Typography>
       </Box>
 
-      <TableContainer component={Paper} sx={{ borderRadius: 3 }}>
+      <TableContainer component={Paper} sx={{ borderRadius: 1 }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -369,7 +369,7 @@ export default function HolidaysPage() {
         </Table>
       </TableContainer>
 
-      <Dialog open={openForm} onClose={handleCloseForm} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+      <Dialog open={openForm} onClose={handleCloseForm} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 1 } }}>
         <DialogTitle sx={{ fontFamily: '"Syne", sans-serif' }}>
           {editing ? 'Editar feriado' : 'Nuevo feriado'}
         </DialogTitle>
@@ -420,7 +420,7 @@ export default function HolidaysPage() {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={openImport} onClose={handleCloseImport} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+      <Dialog open={openImport} onClose={handleCloseImport} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 1 } }}>
         <DialogTitle sx={{ fontFamily: '"Syne", sans-serif' }}>
           Importar feriados desde CSV
         </DialogTitle>
@@ -485,7 +485,7 @@ export default function HolidaysPage() {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={Boolean(deleteTarget)} onClose={handleCloseDelete} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+      <Dialog open={Boolean(deleteTarget)} onClose={handleCloseDelete} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 1 } }}>
         <DialogTitle sx={{ fontFamily: '"Syne", sans-serif', pb: 1 }}>
           Eliminar feriado
         </DialogTitle>

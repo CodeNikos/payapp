@@ -529,7 +529,7 @@ export default function TimesheetsPage() {
         gap: 2,
         mb: 3,
         p: 2,
-        borderRadius: 3,
+        borderRadius: 1,
         bgcolor: COLORS.cardBg,
         border: `1px solid ${COLORS.borderSubtle}`,
         alignItems: 'center',

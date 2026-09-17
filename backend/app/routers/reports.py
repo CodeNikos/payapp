@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Optional
 from datetime import date
 from decimal import Decimal
+from io import BytesIO
 
 from app.core.database import get_db
 from app.core.security import get_current_user, require_role
@@ -20,12 +22,14 @@ from app.schemas.vacation import (
     VacationUsageResponse,
     VacationDetailResponse,
 )
+from app.schemas.sipe import SipeReportPreviewResponse, SipeReportRow
 from app.services.vacation import (
     compute_vacation_balance,
     compute_vacation_balance_cutoff,
     compute_vacation_end_date,
     compute_vacation_payment,
 )
+from app.services.sipe_report import build_sipe_rows, rows_to_workbook_bytes, sipe_filename
 
 router = APIRouter()
 
@@ -260,3 +264,75 @@ async def delete_vacation_usage(
         raise HTTPException(status_code=404, detail="Registro de vacaciones no encontrado")
     await db.delete(usage)
     await db.commit()
+
+
+def _sipe_rows_to_response(year: int, month: int, rows) -> SipeReportPreviewResponse:
+    warnings = []
+    missing = [r for r in rows if r.missing_nss]
+    if missing:
+        names = ", ".join(f"{r.first_name} {r.last_name}" for r in missing[:5])
+        extra = f" y {len(missing) - 5} más" if len(missing) > 5 else ""
+        warnings.append(
+            f"{len(missing)} empleado(s) sin Número de Seguro Social: {names}{extra}."
+        )
+    items = [
+        SipeReportRow(
+            employee_id=r.employee_id,
+            document_type=r.document_type,
+            document_id=r.document_id,
+            social_security_number=r.social_security_number or "0",
+            first_name=r.first_name,
+            last_name=r.last_name,
+            sueldo=r.sueldo,
+            horas_extras=r.horas_extras,
+            impuesto_renta=r.impuesto_renta,
+            decimo=r.decimo,
+            vacaciones=r.vacaciones,
+            comisiones=r.comisiones,
+            bonificaciones=r.bonificaciones,
+            combustible=r.combustible,
+            dieta=r.dieta,
+            salario_especie=r.salario_especie,
+            viaticos=r.viaticos,
+            gasto_representacion=r.gasto_representacion,
+            isr_gasto_representacion=r.isr_gasto_representacion,
+            decimo_gasto_representacion=r.decimo_gasto_representacion,
+            primas_produccion=r.primas_produccion,
+            dividendo=r.dividendo,
+            participacion_beneficios=r.participacion_beneficios,
+            gratificacion=r.gratificacion,
+            preaviso=r.preaviso,
+            indemnizacion=r.indemnizacion,
+            missing_nss=r.missing_nss,
+        )
+        for r in rows
+    ]
+    return SipeReportPreviewResponse(year=year, month=month, items=items, warnings=warnings)
+
+
+@router.get("/sipe/preview", response_model=SipeReportPreviewResponse)
+async def sipe_preview(
+    year: int = Query(..., ge=2000, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    rows = await build_sipe_rows(db, year, month)
+    return _sipe_rows_to_response(year, month, rows)
+
+
+@router.get("/sipe")
+async def sipe_download(
+    year: int = Query(..., ge=2000, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    rows = await build_sipe_rows(db, year, month)
+    content = rows_to_workbook_bytes(rows)
+    filename = sipe_filename(year, month)
+    return StreamingResponse(
+        BytesIO(content),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

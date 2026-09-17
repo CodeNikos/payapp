@@ -350,3 +350,71 @@ async def run_migrations():
         await conn.execute(text(
             "CREATE INDEX IF NOT EXISTS ix_settlements_termination_date ON settlements (termination_date)"
         ))
+
+        # SIPE: tipo de documento y NSS en empleados
+        await conn.execute(text("""
+            DO $$ BEGIN
+                CREATE TYPE documenttype AS ENUM ('cedula', 'pasaporte');
+            EXCEPTION
+                WHEN duplicate_object THEN null;
+            END $$
+        """))
+        await conn.execute(text(
+            "ALTER TABLE employees "
+            "ADD COLUMN IF NOT EXISTS document_type documenttype NOT NULL DEFAULT 'cedula'"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE employees "
+            "ADD COLUMN IF NOT EXISTS social_security_number VARCHAR(30)"
+        ))
+
+        # SIPE: ingresos adicionales en planilla
+        for col in (
+            "fuel_allowance",
+            "meal_allowance",
+            "salary_in_kind",
+            "travel_allowance",
+            "representation_expense",
+        ):
+            await conn.execute(text(
+                f"ALTER TABLE payrolls "
+                f"ADD COLUMN IF NOT EXISTS {col} NUMERIC(12, 2) NOT NULL DEFAULT 0"
+            ))
+
+        # Desglose de otras deducciones (JSON)
+        await conn.execute(text(
+            "ALTER TABLE payrolls "
+            "ADD COLUMN IF NOT EXISTS deduction_items TEXT"
+        ))
+
+        # Descuentos recurrentes por empleado
+        await conn.execute(text("""
+            DO $$ BEGIN
+                CREATE TYPE deductionfrequency AS ENUM ('mensual', 'quincenal');
+            EXCEPTION
+                WHEN duplicate_object THEN null;
+            END $$
+        """))
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS employee_recurring_deductions (
+                id SERIAL PRIMARY KEY,
+                employee_id INTEGER NOT NULL REFERENCES employees(id),
+                concept VARCHAR(200) NOT NULL,
+                amount NUMERIC(12, 2) NOT NULL,
+                frequency deductionfrequency NOT NULL,
+                monthly_quincena INTEGER,
+                start_date DATE NOT NULL,
+                end_date DATE,
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ
+            )
+        """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_employee_recurring_deductions_employee_id "
+            "ON employee_recurring_deductions (employee_id)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_employee_recurring_deductions_is_active "
+            "ON employee_recurring_deductions (is_active)"
+        ))

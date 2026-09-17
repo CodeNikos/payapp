@@ -29,6 +29,11 @@ class Payroll(Base):
     overtime_amount = Column(Numeric(12, 2), default=0)
     bonuses = Column(Numeric(12, 2), default=0)
     commissions = Column(Numeric(12, 2), default=0)
+    fuel_allowance = Column(Numeric(12, 2), default=0)  # Combustible
+    meal_allowance = Column(Numeric(12, 2), default=0)  # Dieta
+    salary_in_kind = Column(Numeric(12, 2), default=0)  # Salario en especie
+    travel_allowance = Column(Numeric(12, 2), default=0)  # Viáticos
+    representation_expense = Column(Numeric(12, 2), default=0)  # Gasto de representación
     gross_salary = Column(Numeric(12, 2), nullable=False)
     payroll_type = Column(SAEnum(PayrollType), default=PayrollType.regular, nullable=False)
     decimo_accrued_total = Column(Numeric(12, 2), nullable=True)
@@ -40,6 +45,7 @@ class Payroll(Base):
     educational_insurance = Column(Numeric(12, 2), default=0)
     income_tax = Column(Numeric(12, 2), default=0)
     other_deductions = Column(Numeric(12, 2), default=0)
+    deduction_items = Column(Text, nullable=True)  # JSON list of {concept, amount, source}
     total_deductions = Column(Numeric(12, 2), nullable=False)
 
     net_salary = Column(Numeric(12, 2), nullable=False)

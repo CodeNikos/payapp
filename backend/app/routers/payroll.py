@@ -44,6 +44,20 @@ from app.schemas.payroll import (
 
 )
 
+from app.models.recurring_deduction import EmployeeRecurringDeduction
+
+from app.services.recurring_deductions import (
+
+    DeductionLine,
+
+    resolve_for_period,
+
+    sum_lines,
+
+)
+
+import json
+
 from app.services.labor_hours import (
 
     calculate_manual_overtime,
@@ -408,7 +422,16 @@ def calculate_regular_payroll(
 
 
 
-    gross = base + overtime_amount + data.bonuses + data.commissions
+    fuel = data.fuel_allowance or Decimal("0")
+    meal = data.meal_allowance or Decimal("0")
+    kind = data.salary_in_kind or Decimal("0")
+    travel = data.travel_allowance or Decimal("0")
+    representation = data.representation_expense or Decimal("0")
+
+    gross = (
+        base + overtime_amount + data.bonuses + data.commissions
+        + fuel + meal + kind + travel + representation
+    )
 
     deductions = _apply_deductions(gross, full_base, period_factor, data.other_deductions)
 
@@ -441,6 +464,16 @@ def calculate_regular_payroll(
         "bonuses": data.bonuses,
 
         "commissions": data.commissions,
+
+        "fuel_allowance": fuel,
+
+        "meal_allowance": meal,
+
+        "salary_in_kind": kind,
+
+        "travel_allowance": travel,
+
+        "representation_expense": representation,
 
         "gross_salary": gross.quantize(Decimal("0.01")),
 
@@ -517,6 +550,16 @@ def calculate_decimo_payroll(
         "bonuses": breakdown.bonuses_from_payrolls,
 
         "commissions": breakdown.commissions_from_payrolls,
+
+        "fuel_allowance": Decimal("0"),
+
+        "meal_allowance": Decimal("0"),
+
+        "salary_in_kind": Decimal("0"),
+
+        "travel_allowance": Decimal("0"),
+
+        "representation_expense": Decimal("0"),
 
         "gross_salary": gross,
 
@@ -711,6 +754,34 @@ async def create_payroll(
 
     pending_absences = []
 
+    deduction_lines: list[DeductionLine] = []
+
+    if data.other_deduction_items:
+
+        for item in data.other_deduction_items:
+
+            deduction_lines.append(
+
+                DeductionLine(concept=item.concept.strip(), amount=item.amount, source="manual")
+
+            )
+
+    elif data.other_deductions and data.other_deductions > 0:
+
+        deduction_lines.append(
+
+            DeductionLine(
+
+                concept="Otras deducciones",
+
+                amount=data.other_deductions,
+
+                source="manual",
+
+            )
+
+        )
+
     try:
 
         if data.payroll_type == PayrollType.decimo:
@@ -723,7 +794,11 @@ async def create_payroll(
 
             )
 
-            calcs = calculate_decimo_payroll(employee, data, existing_payrolls)
+            other_total = sum_lines(deduction_lines)
+
+            payroll_data = data.model_copy(update={"other_deductions": other_total})
+
+            calcs = calculate_decimo_payroll(employee, payroll_data, existing_payrolls)
 
         else:
 
@@ -749,25 +824,63 @@ async def create_payroll(
 
             absence_deduction = compute_absence_salary_deduction(employee, pending_absences)
 
-            payroll_data = data
+            notes_extra = data.notes or ""
 
             if absence_deduction > 0:
 
-                payroll_data = data.model_copy(
+                deduction_lines.append(
 
-                    update={
+                    DeductionLine(
 
-                        "other_deductions": (data.other_deductions or Decimal("0")) + absence_deduction,
+                        concept="Ausencias injustificadas",
 
-                        "notes": (
+                        amount=absence_deduction,
 
-                            f"{data.notes}\n" if data.notes else ""
+                        source="absence",
 
-                        ) + f"[Ausencias] Descuento injustificado: ${absence_deduction}",
-
-                    }
+                    )
 
                 )
+
+                notes_extra = (
+
+                    f"{notes_extra}\n" if notes_extra else ""
+
+                ) + f"[Ausencias] Descuento injustificado: ${absence_deduction}"
+
+            rec_result = await db.execute(
+
+                select(EmployeeRecurringDeduction).where(
+
+                    EmployeeRecurringDeduction.employee_id == data.employee_id,
+
+                    EmployeeRecurringDeduction.is_active.is_(True),
+
+                )
+
+            )
+
+            recurring_rows = list(rec_result.scalars().all())
+
+            deduction_lines.extend(
+
+                resolve_for_period(recurring_rows, data.period_start, data.period_end)
+
+            )
+
+            other_total = sum_lines(deduction_lines)
+
+            payroll_data = data.model_copy(
+
+                update={
+
+                    "other_deductions": other_total,
+
+                    "notes": notes_extra or None,
+
+                }
+
+            )
 
             calcs = calculate_regular_payroll(employee, payroll_data, timesheet_entries, holidays)
 
@@ -781,6 +894,14 @@ async def create_payroll(
 
     payment_date = calcs.pop("payment_date", data.payment_date)
 
+    deduction_items_json = json.dumps(
+
+        [line.to_dict() for line in deduction_lines],
+
+        ensure_ascii=False,
+
+    ) if deduction_lines else None
+
     payroll = Payroll(
 
         employee_id=data.employee_id,
@@ -790,6 +911,8 @@ async def create_payroll(
         payment_date=payment_date,
 
         created_by=current_user.id,
+
+        deduction_items=deduction_items_json,
 
         **calcs,
 

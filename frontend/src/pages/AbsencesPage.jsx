@@ -386,7 +386,7 @@ export default function AbsencesPage() {
         mb: 2.5,
         px: 2,
         py: 1.5,
-        borderRadius: 2.5,
+        borderRadius: 1,
         bgcolor: COLORS.cardBg,
         border: `1px solid ${COLORS.borderSubtle}`,
       }}>
@@ -445,7 +445,7 @@ export default function AbsencesPage() {
         )}
       </Box>
 
-      <TableContainer component={Paper} sx={{ borderRadius: 3 }}>
+      <TableContainer component={Paper} sx={{ borderRadius: 1 }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -544,7 +544,7 @@ export default function AbsencesPage() {
         </Table>
       </TableContainer>
 
-      <Dialog open={openForm} onClose={handleClose} maxWidth="sm" fullWidth scroll="body" PaperProps={{ sx: { borderRadius: 3 } }}>
+      <Dialog open={openForm} onClose={handleClose} maxWidth="sm" fullWidth scroll="body" PaperProps={{ sx: { borderRadius: 1 } }}>
         <DialogTitle sx={{ fontFamily: '"Syne", sans-serif', pb: 1 }}>
           {editing ? 'Editar ausencia' : 'Nueva ausencia'}
         </DialogTitle>

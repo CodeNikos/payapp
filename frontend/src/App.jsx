@@ -11,6 +11,7 @@ import CompaniesPage from './pages/CompaniesPage'
 import AbsencesPage from './pages/AbsencesPage'
 import TimesheetsPage from './pages/TimesheetsPage'
 import ReportsPage from './pages/ReportsPage'
+import RecurringDeductionsPage from './pages/RecurringDeductionsPage'
 import AppLayout from './components/layout/AppLayout'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 
@@ -36,6 +37,9 @@ export default function App() {
             } />
             <Route path="companies" element={
               <ProtectedRoute adminOnly><CompaniesPage /></ProtectedRoute>
+            } />
+            <Route path="recurring-deductions" element={
+              <ProtectedRoute adminOnly><RecurringDeductionsPage /></ProtectedRoute>
             } />
             <Route path="absences" element={
               <ProtectedRoute adminOnly><AbsencesPage /></ProtectedRoute>

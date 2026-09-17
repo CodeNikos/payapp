@@ -3,11 +3,12 @@ import {
   Box, Typography, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Paper, CircularProgress, TextField,
   Tabs, Tab, Button, Dialog, DialogTitle, DialogContent, DialogActions,
-  InputAdornment, IconButton, Tooltip,
+  InputAdornment, IconButton, Tooltip, MenuItem,
 } from '@mui/material'
 import AppAlert from '../components/common/AppAlert'
 import {
-  SearchOutlined, BeachAccessOutlined, EventNoteOutlined, HistoryOutlined, EditOutlined, DeleteOutlined,
+  SearchOutlined, BeachAccessOutlined, HistoryOutlined, EditOutlined, DeleteOutlined,
+  DownloadOutlined, DescriptionOutlined,
 } from '@mui/icons-material'
 import { reportsApi, getApiError } from '../services/api'
 import { COLORS } from '../theme/theme'
@@ -99,7 +100,7 @@ function VacationsReportTab() {
         </Typography>
       </Box>
 
-      <TableContainer component={Paper} sx={{ borderRadius: 3 }}>
+      <TableContainer component={Paper} sx={{ borderRadius: 1 }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -304,7 +305,7 @@ function VacationsTakenReportTab() {
         />
       </Box>
 
-      <TableContainer component={Paper} sx={{ borderRadius: 3 }}>
+      <TableContainer component={Paper} sx={{ borderRadius: 1 }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -367,7 +368,7 @@ function VacationsTakenReportTab() {
         </Table>
       </TableContainer>
 
-      <Dialog open={Boolean(editing)} onClose={closeEdit} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+      <Dialog open={Boolean(editing)} onClose={closeEdit} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 1 } }}>
         <DialogTitle sx={{ fontFamily: '"Syne", sans-serif', pb: 1 }}>
           Editar vacaciones tomadas
         </DialogTitle>
@@ -444,6 +445,196 @@ function VacationsTakenReportTab() {
   )
 }
 
+function SipeReportTab() {
+  const now = new Date()
+  const [year, setYear] = useState(String(now.getFullYear()))
+  const [month, setMonth] = useState(String(now.getMonth() + 1))
+  const [items, setItems] = useState([])
+  const [warnings, setWarnings] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+  const [error, setError] = useState('')
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await reportsApi.sipePreview({
+        year: parseInt(year, 10),
+        month: parseInt(month, 10),
+      })
+      setItems(res.data.items || [])
+      setWarnings(res.data.warnings || [])
+    } catch (e) {
+      setError(getApiError(e, 'Error al cargar reporte SIPE'))
+      setItems([])
+      setWarnings([])
+    } finally {
+      setLoading(false)
+    }
+  }, [year, month])
+
+  useEffect(() => { load() }, [load])
+
+  const fmt = (v) => parseFloat(v || 0).toLocaleString('es-PA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  const handleDownload = async () => {
+    setDownloading(true)
+    setError('')
+    try {
+      const res = await reportsApi.sipeDownload({
+        year: parseInt(year, 10),
+        month: parseInt(month, 10),
+      })
+      const blob = new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `sipe_planilla_${year}_${String(month).padStart(2, '0')}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (e) {
+      setError(getApiError(e, 'Error al descargar Excel SIPE'))
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  const months = [
+    [1, 'Enero'], [2, 'Febrero'], [3, 'Marzo'], [4, 'Abril'],
+    [5, 'Mayo'], [6, 'Junio'], [7, 'Julio'], [8, 'Agosto'],
+    [9, 'Septiembre'], [10, 'Octubre'], [11, 'Noviembre'], [12, 'Diciembre'],
+  ]
+
+  return (
+    <Box>
+      {error && (
+        <AppAlert severity="error" variant="banner" onClose={() => setError('')} sx={{ mb: 2 }}>
+          {error}
+        </AppAlert>
+      )}
+      {warnings.map((w) => (
+        <AppAlert key={w} severity="warning" variant="banner" sx={{ mb: 2 }}>
+          {w}
+        </AppAlert>
+      ))}
+
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3, alignItems: 'flex-end' }}>
+        <TextField
+          size="small"
+          select
+          label="Año"
+          value={year}
+          onChange={(e) => setYear(e.target.value)}
+          sx={{ minWidth: 110 }}
+        >
+          {[now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2].map((y) => (
+            <MenuItem key={y} value={String(y)}>{y}</MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          size="small"
+          select
+          label="Mes"
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+          sx={{ minWidth: 160 }}
+        >
+          {months.map(([m, label]) => (
+            <MenuItem key={m} value={String(m)}>{label}</MenuItem>
+          ))}
+        </TextField>
+        <Button variant="outlined" onClick={load} disabled={loading}>
+          Actualizar
+        </Button>
+        <Button
+          variant="contained"
+          startIcon={downloading ? <CircularProgress size={16} color="inherit" /> : <DownloadOutlined />}
+          onClick={handleDownload}
+          disabled={downloading || loading}
+        >
+          Descargar Excel
+        </Button>
+      </Box>
+
+      <Typography variant="body2" sx={{ color: COLORS.textSecondary, mb: 2 }}>
+        Archivo en formato SIPE (CSS) con columnas A–Y, a partir de nóminas, vacaciones y liquidaciones del mes.
+      </Typography>
+
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+          <CircularProgress />
+        </Box>
+      ) : (
+        <TableContainer component={Paper} sx={{ borderRadius: 1 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Tipo doc.</TableCell>
+                <TableCell>Cédula</TableCell>
+                <TableCell>NSS</TableCell>
+                <TableCell>Nombre</TableCell>
+                <TableCell align="right">Sueldo</TableCell>
+                <TableCell align="right">Horas extra</TableCell>
+                <TableCell align="right">ISR</TableCell>
+                <TableCell align="right">Décimo</TableCell>
+                <TableCell align="right">Vacaciones</TableCell>
+                <TableCell align="right">Otros ingresos*</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {items.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={10} align="center" sx={{ py: 4, color: COLORS.textMuted }}>
+                    Sin movimientos SIPE en este período
+                  </TableCell>
+                </TableRow>
+              ) : items.map((row) => {
+                const otros = (
+                  parseFloat(row.comisiones || 0)
+                  + parseFloat(row.bonificaciones || 0)
+                  + parseFloat(row.combustible || 0)
+                  + parseFloat(row.dieta || 0)
+                  + parseFloat(row.salario_especie || 0)
+                  + parseFloat(row.viaticos || 0)
+                  + parseFloat(row.gasto_representacion || 0)
+                )
+                return (
+                  <TableRow key={row.employee_id} hover>
+                    <TableCell>{row.document_type}</TableCell>
+                    <TableCell sx={{ fontFamily: '"DM Mono", monospace', fontSize: '0.8rem' }}>{row.document_id}</TableCell>
+                    <TableCell sx={{
+                      fontFamily: '"DM Mono", monospace',
+                      fontSize: '0.8rem',
+                      color: row.missing_nss ? COLORS.error : undefined,
+                    }}>
+                      {row.social_security_number}
+                    </TableCell>
+                    <TableCell>{row.first_name} {row.last_name}</TableCell>
+                    <TableCell align="right" sx={{ fontFamily: '"DM Mono", monospace' }}>{fmt(row.sueldo)}</TableCell>
+                    <TableCell align="right" sx={{ fontFamily: '"DM Mono", monospace' }}>{fmt(row.horas_extras)}</TableCell>
+                    <TableCell align="right" sx={{ fontFamily: '"DM Mono", monospace' }}>{fmt(row.impuesto_renta)}</TableCell>
+                    <TableCell align="right" sx={{ fontFamily: '"DM Mono", monospace' }}>{fmt(row.decimo)}</TableCell>
+                    <TableCell align="right" sx={{ fontFamily: '"DM Mono", monospace' }}>{fmt(row.vacaciones)}</TableCell>
+                    <TableCell align="right" sx={{ fontFamily: '"DM Mono", monospace' }}>{fmt(otros)}</TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+      <Typography variant="caption" sx={{ display: 'block', mt: 1.5, color: COLORS.textMuted }}>
+        * Otros ingresos: comisiones, bonificaciones, combustible, dieta, salario en especie, viáticos y gasto de representación.
+      </Typography>
+    </Box>
+  )
+}
+
 export default function ReportsPage() {
   const [tab, setTab] = useState(0)
 
@@ -456,7 +647,7 @@ export default function ReportsPage() {
         </Typography>
       </Box>
 
-      <Paper sx={{ borderRadius: 3, mb: 3 }}>
+      <Paper sx={{ borderRadius: 1, mb: 3 }}>
         <Tabs
           value={tab}
           onChange={(_, v) => setTab(v)}
@@ -468,17 +659,13 @@ export default function ReportsPage() {
         >
           <Tab icon={<BeachAccessOutlined sx={{ fontSize: 18 }} />} iconPosition="start" label="Días acumulados" />
           <Tab icon={<HistoryOutlined sx={{ fontSize: 18 }} />} iconPosition="start" label="Vacaciones tomadas" />
-          <Tab icon={<EventNoteOutlined sx={{ fontSize: 18 }} />} iconPosition="start" label="Más reportes" disabled />
+          <Tab icon={<DescriptionOutlined sx={{ fontSize: 18 }} />} iconPosition="start" label="Reporte SIPE" />
         </Tabs>
       </Paper>
 
       {tab === 0 && <VacationsReportTab />}
       {tab === 1 && <VacationsTakenReportTab />}
-      {tab === 2 && (
-        <Paper sx={{ p: 4, borderRadius: 3, textAlign: 'center' }}>
-          <Typography sx={{ color: COLORS.textMuted }}>Más reportes próximamente</Typography>
-        </Paper>
-      )}
+      {tab === 2 && <SipeReportTab />}
     </Box>
   )
 }

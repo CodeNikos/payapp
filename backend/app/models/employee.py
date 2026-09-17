@@ -19,6 +19,11 @@ class ContractType(str, enum.Enum):
     obra_labor = "obra_labor"
 
 
+class DocumentType(str, enum.Enum):
+    cedula = "cedula"
+    pasaporte = "pasaporte"
+
+
 SATURDAY_HALF_DAY_HOURS = Decimal("4")
 
 
@@ -39,6 +44,8 @@ class Employee(Base):
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
     document_id = Column(String(20), unique=True, nullable=False)
+    document_type = Column(SAEnum(DocumentType), default=DocumentType.cedula, nullable=False)
+    social_security_number = Column(String(30), nullable=True)
     email = Column(String(255), unique=True, nullable=True)
     phone = Column(String(20), nullable=True)
     position = Column(String(150), nullable=False)
@@ -63,6 +70,9 @@ class Employee(Base):
     vacation_usages = relationship("VacationUsage", back_populates="employee")
     absences = relationship("Absence", back_populates="employee")
     settlements = relationship("Settlement", back_populates="employee")
+    recurring_deductions = relationship(
+        "EmployeeRecurringDeduction", back_populates="employee"
+    )
 
     @property
     def full_name(self):

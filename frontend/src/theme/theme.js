@@ -86,7 +86,7 @@ export const theme = createTheme({
     overline: { fontFamily: '"DM Mono", monospace', fontSize: '0.6875rem', letterSpacing: '0.1em' },
     button: { fontFamily: '"DM Sans", sans-serif', fontWeight: 600, letterSpacing: '0.01em' },
   },
-  shape: { borderRadius: 12 },
+  shape: { borderRadius: 4 },
   components: {
     MuiCssBaseline: {
       styleOverrides: `
@@ -95,14 +95,14 @@ export const theme = createTheme({
         body { background-color: ${COLORS.pageBg}; color: ${COLORS.textPrimary}; }
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: ${alpha(COLORS.textSecondary, 0.12)}; }
-        ::-webkit-scrollbar-thumb { background: ${alpha(COLORS.textSecondary, 0.35)}; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb { background: ${alpha(COLORS.textSecondary, 0.35)}; border-radius: 2px; }
         ::-webkit-scrollbar-thumb:hover { background: ${alpha(COLORS.textSecondary, 0.55)}; }
       `,
     },
     MuiButton: {
       styleOverrides: {
         root: {
-          borderRadius: 8,
+          borderRadius: 4,
           textTransform: 'none',
           fontWeight: 600,
           letterSpacing: '0.01em',
@@ -134,7 +134,7 @@ export const theme = createTheme({
         root: {
           backgroundColor: COLORS.cardBg,
           border: `1px solid ${COLORS.borderSubtle}`,
-          borderRadius: 16,
+          borderRadius: 4,
           backgroundImage: 'none',
           boxShadow: '0 1px 6px rgba(22, 52, 71, 0.05)',
         },
@@ -146,7 +146,18 @@ export const theme = createTheme({
           backgroundImage: 'none',
           backgroundColor: COLORS.cardBg,
           border: `1px solid ${COLORS.borderSubtle}`,
+          borderRadius: 4,
           boxShadow: '0 1px 6px rgba(22, 52, 71, 0.05)',
+        },
+        rounded: {
+          borderRadius: 4,
+        },
+      },
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: {
+          borderRadius: 4,
         },
       },
     },
@@ -156,7 +167,7 @@ export const theme = createTheme({
         root: {
           '& .MuiOutlinedInput-root': {
             backgroundColor: COLORS.inputBg,
-            borderRadius: 8,
+            borderRadius: 4,
             '& fieldset': { borderColor: COLORS.borderSubtle },
             '&:hover fieldset': { borderColor: alpha(COLORS.brand, 0.45) },
             '&.Mui-focused fieldset': { borderColor: COLORS.brand },
@@ -245,7 +256,7 @@ export const theme = createTheme({
           backgroundColor: COLORS.textPrimary,
           color: COLORS.textOnDark,
           fontSize: '0.8rem',
-          borderRadius: 8,
+          borderRadius: 4,
           boxShadow: '0 4px 12px rgba(43, 47, 51, 0.2)',
         },
         arrow: { color: COLORS.textPrimary },
@@ -257,7 +268,7 @@ export const theme = createTheme({
       },
       styleOverrides: {
         root: {
-          borderRadius: 12,
+          borderRadius: 4,
           border: '1px solid',
           padding: '10px 14px',
           fontSize: '0.8125rem',
@@ -325,7 +336,7 @@ export const theme = createTheme({
     MuiListItemButton: {
       styleOverrides: {
         root: {
-          borderRadius: 10,
+          borderRadius: 4,
           margin: '2px 8px',
           transition: 'all 0.15s ease',
           '&:hover': { backgroundColor: alpha(COLORS.white, 0.08) },
