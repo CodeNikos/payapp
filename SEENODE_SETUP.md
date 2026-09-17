@@ -12,7 +12,7 @@ Sigue estos pasos en [cloud.seenode.com](https://cloud.seenode.com) después de 
 ## 2. Web Service
 
 - [ ] **New** → **Web Service** → conectar repo `payapp`, rama `main`
-- [ ] **Runtime: Python 3.12** (no usar 3.14 — `pydantic-core` no compila aún)
+- [ ] **Runtime: Python 3.12** (obligatorio — con 3.14 pueden faltar wheels y fallar migraciones/login)
 - [ ] Root Directory: **vacío** (raíz del repo)
 - [ ] **Build Command:** `bash build.sh`
 - [ ] **Start Command:** `bash start.sh`
