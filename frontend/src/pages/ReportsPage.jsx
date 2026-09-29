@@ -13,6 +13,8 @@ import {
 import { reportsApi, getApiError } from '../services/api'
 import { COLORS } from '../theme/theme'
 import { alpha } from '@mui/material/styles'
+import CompanyFilterSelect from '../components/common/CompanyFilterSelect'
+import { useCompanyFilterStore } from '../context/companyFilterStore'
 
 const VACATION_RATE = 30 / 11
 
@@ -35,19 +37,24 @@ function VacationsReportTab() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
+  const companyCode = useCompanyFilterStore((s) => s.selectedCompanyCode)
+  const companyQuery = useCompanyFilterStore((s) => s.companyQueryParam)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const res = await reportsApi.vacations({ as_of: asOf || undefined })
+      const res = await reportsApi.vacations({
+        as_of: asOf || undefined,
+        company_code: companyQuery(),
+      })
       setItems(res.data.items)
     } catch (e) {
       setError(getApiError(e, 'Error al cargar reporte'))
     } finally {
       setLoading(false)
     }
-  }, [asOf])
+  }, [asOf, companyCode, companyQuery])
 
   useEffect(() => { load() }, [load])
 
@@ -72,6 +79,7 @@ function VacationsReportTab() {
       )}
 
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3, alignItems: 'flex-end' }}>
+        <CompanyFilterSelect />
         <TextField
           size="small"
           label="Fecha de consulta"
@@ -159,12 +167,14 @@ function VacationsTakenReportTab() {
   const [editing, setEditing] = useState(null)
   const [editForm, setEditForm] = useState({ days: '', start_date: '', notes: '' })
   const [saving, setSaving] = useState(false)
+  const companyCode = useCompanyFilterStore((s) => s.selectedCompanyCode)
+  const companyQuery = useCompanyFilterStore((s) => s.companyQueryParam)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const params = {}
+      const params = { company_code: companyQuery() }
       if (fromDate) params.from = fromDate
       if (toDate) params.to = toDate
       const res = await reportsApi.vacationsTaken(params)
@@ -174,7 +184,7 @@ function VacationsTakenReportTab() {
     } finally {
       setLoading(false)
     }
-  }, [fromDate, toDate])
+  }, [fromDate, toDate, companyCode, companyQuery])
 
   useEffect(() => { load() }, [load])
 
@@ -271,6 +281,7 @@ function VacationsTakenReportTab() {
       )}
 
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3, alignItems: 'flex-end' }}>
+        <CompanyFilterSelect />
         <TextField
           size="small"
           label="Desde"
@@ -454,6 +465,8 @@ function SipeReportTab() {
   const [loading, setLoading] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [error, setError] = useState('')
+  const companyCode = useCompanyFilterStore((s) => s.selectedCompanyCode)
+  const companyQuery = useCompanyFilterStore((s) => s.companyQueryParam)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -462,6 +475,7 @@ function SipeReportTab() {
       const res = await reportsApi.sipePreview({
         year: parseInt(year, 10),
         month: parseInt(month, 10),
+        company_code: companyQuery(),
       })
       setItems(res.data.items || [])
       setWarnings(res.data.warnings || [])
@@ -472,7 +486,7 @@ function SipeReportTab() {
     } finally {
       setLoading(false)
     }
-  }, [year, month])
+  }, [year, month, companyCode, companyQuery])
 
   useEffect(() => { load() }, [load])
 
@@ -485,6 +499,7 @@ function SipeReportTab() {
       const res = await reportsApi.sipeDownload({
         year: parseInt(year, 10),
         month: parseInt(month, 10),
+        company_code: companyQuery(),
       })
       const blob = new Blob([res.data], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -492,7 +507,8 @@ function SipeReportTab() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `sipe_planilla_${year}_${String(month).padStart(2, '0')}.xlsx`
+      const companySuffix = companyCode ? `_${companyCode}` : ''
+      a.download = `sipe_planilla_${year}_${String(month).padStart(2, '0')}${companySuffix}.xlsx`
       document.body.appendChild(a)
       a.click()
       a.remove()
@@ -524,6 +540,7 @@ function SipeReportTab() {
       ))}
 
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3, alignItems: 'flex-end' }}>
+        <CompanyFilterSelect />
         <TextField
           size="small"
           select

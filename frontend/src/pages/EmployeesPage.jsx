@@ -14,6 +14,8 @@ import {
 import { employeesApi, companiesApi, reportsApi, getApiError } from '../services/api'
 import { COLORS } from '../theme/theme'
 import { alpha } from '@mui/material/styles'
+import CompanyFilterSelect from '../components/common/CompanyFilterSelect'
+import { useCompanyFilterStore } from '../context/companyFilterStore'
 
 const CONTRACT_TYPES = ['indefinido', 'temporal', 'obra_labor']
 const DEPARTMENTS = ['Administración', 'Ventas', 'Operaciones', 'Tecnología', 'RRHH', 'Finanzas', 'Producción']
@@ -388,6 +390,9 @@ export default function EmployeesPage() {
   const [vacationError, setVacationError] = useState('')
   const [vacationSuccess, setVacationSuccess] = useState('')
 
+  const companyCode = useCompanyFilterStore((s) => s.selectedCompanyCode)
+  const companyQuery = useCompanyFilterStore((s) => s.companyQueryParam)
+
   const companyByCode = Object.fromEntries(companies.map(c => [c.company_code, c]))
   const activeCompanies = companies.filter(c => c.status === 'activo')
   const companyOptions = editing?.company_code && !activeCompanies.some(c => c.company_code === editing.company_code)
@@ -398,14 +403,19 @@ export default function EmployeesPage() {
     setLoading(true)
     try {
       const [empRes, companyRes] = await Promise.all([
-        employeesApi.list({ search: search || undefined, limit: 200, include_inactive: true }),
+        employeesApi.list({
+          search: search || undefined,
+          limit: 200,
+          include_inactive: true,
+          company_code: companyQuery(),
+        }),
         companiesApi.list({ limit: 200 }),
       ])
       setEmployees(empRes.data)
       setCompanies(companyRes.data)
     } catch { /* ignore */ }
     finally { setLoading(false) }
-  }, [search])
+  }, [search, companyCode])
 
   useEffect(() => { load() }, [load])
 
@@ -688,7 +698,8 @@ export default function EmployeesPage() {
         <AppAlert severity="success" variant="banner" onClose={() => setVacationSuccess('')}>{vacationSuccess}</AppAlert>
       )}
 
-      <Box sx={{ mb: 3 }}>
+      <Box sx={{ mb: 3, display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'flex-end' }}>
+        <CompanyFilterSelect />
         <TextField
           placeholder="Buscar por nombre, cédula o código..."
           value={search}

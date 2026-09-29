@@ -13,6 +13,8 @@ import {
 } from '@mui/icons-material'
 import { absencesApi, employeesApi, getApiError } from '../services/api'
 import { COLORS } from '../theme/theme'
+import CompanyFilterSelect from '../components/common/CompanyFilterSelect'
+import { useCompanyFilterStore } from '../context/companyFilterStore'
 
 const MONTH_OPTIONS = [
   { value: 1, label: 'Enero' },
@@ -166,6 +168,8 @@ export default function AbsencesPage() {
   const [filterYear, setFilterYear] = useState(ALL_FILTER)
   const [filterMonth, setFilterMonth] = useState(ALL_FILTER)
   const [filterEmployeeId, setFilterEmployeeId] = useState(ALL_FILTER)
+  const companyCode = useCompanyFilterStore((s) => s.selectedCompanyCode)
+  const companyQuery = useCompanyFilterStore((s) => s.companyQueryParam)
 
   const hasActiveFilters = filterYear !== ALL_FILTER || filterMonth !== ALL_FILTER || filterEmployeeId !== ALL_FILTER
 
@@ -229,15 +233,16 @@ export default function AbsencesPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
+      const cc = companyQuery()
       const [absRes, empRes] = await Promise.all([
-        absencesApi.list({ limit: 200 }),
-        employeesApi.list({ limit: 200 }),
+        absencesApi.list({ limit: 200, company_code: cc }),
+        employeesApi.list({ limit: 200, company_code: cc }),
       ])
       setItems(absRes.data)
       setEmployees(empRes.data.filter(e => e.is_active))
     } catch { /* ignore */ }
     finally { setLoading(false) }
-  }, [])
+  }, [companyCode, companyQuery])
 
   useEffect(() => { load() }, [load])
 
@@ -396,6 +401,7 @@ export default function AbsencesPage() {
             Filtros
           </Typography>
         </Box>
+        <CompanyFilterSelect />
         <TextField
           select
           size="small"

@@ -12,6 +12,8 @@ import AppAlert from '../components/common/AppAlert'
 import { timesheetsApi, employeesApi, getApiError } from '../services/api'
 import { COLORS } from '../theme/theme'
 import { alpha } from '@mui/material/styles'
+import CompanyFilterSelect from '../components/common/CompanyFilterSelect'
+import { useCompanyFilterStore } from '../context/companyFilterStore'
 
 const MONTH_NAMES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -405,6 +407,8 @@ export default function TimesheetsPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
+  const companyCode = useCompanyFilterStore((s) => s.selectedCompanyCode)
+  const companyQuery = useCompanyFilterStore((s) => s.companyQueryParam)
 
   const selectedEmployee = useMemo(
     () => employees.find(e => e.id === Number(employeeId)),
@@ -415,12 +419,16 @@ export default function TimesheetsPage() {
 
   const loadEmployees = useCallback(async () => {
     try {
-      const res = await employeesApi.list({ limit: 200 })
+      const res = await employeesApi.list({ limit: 200, company_code: companyQuery() })
       const active = res.data.filter(e => e.is_active && e.status === 'activo')
       setEmployees(active)
-      if (active.length && !employeeId) setEmployeeId(String(active[0].id))
+      setEmployeeId((prev) => {
+        if (!active.length) return ''
+        if (prev && active.some((e) => String(e.id) === String(prev))) return prev
+        return String(active[0].id)
+      })
     } catch { /* ignore */ }
-  }, [employeeId])
+  }, [companyCode, companyQuery])
 
   const loadTimesheets = useCallback(async () => {
     if (!employeeId) return
@@ -431,6 +439,7 @@ export default function TimesheetsPage() {
         employee_id: Number(employeeId),
         year,
         month,
+        company_code: companyQuery(),
       })
       const monthWeeks = buildWeeks(year, month)
       const next = {}
@@ -452,7 +461,7 @@ export default function TimesheetsPage() {
     } finally {
       setLoading(false)
     }
-  }, [employeeId, year, month])
+  }, [employeeId, year, month, companyCode, companyQuery])
 
   useEffect(() => { loadEmployees() }, [loadEmployees])
   useEffect(() => { loadTimesheets() }, [loadTimesheets])
@@ -534,6 +543,7 @@ export default function TimesheetsPage() {
         border: `1px solid ${COLORS.borderSubtle}`,
         alignItems: 'center',
       }}>
+        <CompanyFilterSelect />
         <TextField
           select
           size="small"

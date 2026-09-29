@@ -17,6 +17,8 @@ import { alpha } from '@mui/material/styles'
 import { payrollApi, employeesApi, getApiError } from '../services/api'
 import { useAuthStore } from '../context/authStore'
 import { COLORS } from '../theme/theme'
+import CompanyFilterSelect from '../components/common/CompanyFilterSelect'
+import { useCompanyFilterStore } from '../context/companyFilterStore'
 
 const statusColor = {
   borrador: 'warning',
@@ -77,8 +79,8 @@ function getSuggestedPaymentDate(year, cuatrimestre) {
 const SCOPE_OPTIONS = [
   {
     value: 'company',
-    label: 'Toda la compañía',
-    description: 'Genera la nómina para todos los empleados activos del período.',
+    label: 'Todos los empleados (de la empresa)',
+    description: 'Genera la nómina para todos los empleados activos del filtro de empresa.',
     icon: BusinessOutlined,
   },
   {
@@ -403,6 +405,8 @@ export default function PayrollPage() {
   const [filterYear, setFilterYear] = useState(ALL_FILTER)
   const [filterMonth, setFilterMonth] = useState(ALL_FILTER)
   const [filterEmployeeId, setFilterEmployeeId] = useState(ALL_FILTER)
+  const companyCode = useCompanyFilterStore((s) => s.selectedCompanyCode)
+  const companyQuery = useCompanyFilterStore((s) => s.companyQueryParam)
 
   const isDecimoMode = form.payroll_type === 'decimo'
   const hasActiveFilters = filterYear !== ALL_FILTER || filterMonth !== ALL_FILTER || filterEmployeeId !== ALL_FILTER
@@ -482,17 +486,24 @@ export default function PayrollPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
+      const cc = companyQuery()
       const [pr, er] = await Promise.all([
-        payrollApi.list({ limit: 200 }),
-        employeesApi.list({ limit: 200 }),
+        payrollApi.list({ limit: 200, company_code: cc }),
+        employeesApi.list({ limit: 200, company_code: cc }),
       ])
       setPayrolls(pr.data)
       setEmployees(er.data)
     } catch { /* ignore */ }
     finally { setLoading(false) }
-  }, [])
+  }, [companyCode, companyQuery])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    setSelectedIds([])
+    setFilterEmployeeId(ALL_FILTER)
+    setDecimoPreview(null)
+  }, [companyCode])
 
   const handleOpenForm = () => {
     setError('')
@@ -545,6 +556,7 @@ export default function PayrollPage() {
         year,
         cuatrimestre,
         employee_ids: scopeMode === 'selected' ? targetIds : undefined,
+        company_code: companyQuery(),
       })
       setDecimoPreview(res.data)
       if (!form.payment_date) {
@@ -578,6 +590,7 @@ export default function PayrollPage() {
             year,
             cuatrimestre,
             employee_ids: scopeMode === 'selected' ? selectedIds : undefined,
+            company_code: companyQuery(),
           })
           decimoItems = res.data.items
           setDecimoPreview(res.data)
@@ -632,6 +645,7 @@ export default function PayrollPage() {
             concept: i.concept.trim(),
             amount: parseFloat(i.amount),
           }))
+        const company_code = companyQuery()
         const payload = isDecimoMode
           ? {
               employee_id,
@@ -641,6 +655,7 @@ export default function PayrollPage() {
               payment_date: form.payment_date,
               other_deduction_items: manualItems.length ? manualItems : undefined,
               notes: form.notes || undefined,
+              company_code,
             }
           : {
               employee_id,
@@ -657,6 +672,7 @@ export default function PayrollPage() {
               representation_expense: parseFloat(form.representation_expense) || 0,
               other_deduction_items: manualItems.length ? manualItems : undefined,
               notes: form.notes || undefined,
+              company_code,
             }
         await payrollApi.create(payload)
         created++
@@ -857,6 +873,7 @@ export default function PayrollPage() {
             Filtros
           </Typography>
         </Box>
+        <CompanyFilterSelect />
         <TextField
           select
           size="small"

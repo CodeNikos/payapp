@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import {
   Box, Typography, Grid, Card, CardContent, Chip,
   LinearProgress, Skeleton, useMediaQuery, useTheme as useMuiTheme,
@@ -15,6 +15,8 @@ import { alpha } from '@mui/material/styles'
 import { useAuthStore } from '../context/authStore'
 import { employeesApi, payrollApi } from '../services/api'
 import { COLORS } from '../theme/theme'
+import CompanyFilterSelect from '../components/common/CompanyFilterSelect'
+import { useCompanyFilterStore } from '../context/companyFilterStore'
 
 const MONTH_LABELS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
@@ -177,30 +179,33 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({ employees: 0, payrolls: 0, totalNomina: 0, growth: null, payrollsLastMonth: 0 })
   const [chartData, setChartData] = useState([])
+  const companyCode = useCompanyFilterStore((s) => s.selectedCompanyCode)
+  const companyQuery = useCompanyFilterStore((s) => s.companyQueryParam)
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const [empRes, payRes] = await Promise.all([
-          employeesApi.list({ limit: 200 }),
-          payrollApi.list({ limit: 200 }),
-        ])
-        const payrolls = payRes.data || []
-        const total = payrolls.reduce((sum, p) => sum + parseFloat(p.net_salary || 0), 0)
-        const series = buildChartData(payrolls)
-        setChartData(series)
-        setStats({
-          employees: empRes.data?.length || 0,
-          payrolls: payrolls.length,
-          totalNomina: total,
-          growth: computeGrowth(series),
-          payrollsLastMonth: countPayrollsLastMonth(payrolls),
-        })
-      } catch { /* use defaults */ }
-      finally { setLoading(false) }
-    }
-    load()
-  }, [])
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const cc = companyQuery()
+      const [empRes, payRes] = await Promise.all([
+        employeesApi.list({ limit: 200, company_code: cc }),
+        payrollApi.list({ limit: 200, company_code: cc }),
+      ])
+      const payrolls = payRes.data || []
+      const total = payrolls.reduce((sum, p) => sum + parseFloat(p.net_salary || 0), 0)
+      const series = buildChartData(payrolls)
+      setChartData(series)
+      setStats({
+        employees: empRes.data?.length || 0,
+        payrolls: payrolls.length,
+        totalNomina: total,
+        growth: computeGrowth(series),
+        payrollsLastMonth: countPayrollsLastMonth(payrolls),
+      })
+    } catch { /* use defaults */ }
+    finally { setLoading(false) }
+  }, [companyCode, companyQuery])
+
+  useEffect(() => { load() }, [load])
 
   const growthLabel = stats.growth == null
     ? 'N/D'
@@ -280,18 +285,26 @@ export default function DashboardPage() {
           </Box>
         </Box>
 
-        {/* Status pill */}
+        {/* Status + company filter */}
         <Box sx={{
-          display: 'flex', alignItems: 'center', gap: 0.75,
-          bgcolor: alpha(COLORS.success, 0.1),
-          border: `1px solid ${alpha(COLORS.success, 0.2)}`,
-          px: 1.5, py: 0.6, borderRadius: 10,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.5,
+          flexWrap: 'wrap',
           alignSelf: { xs: 'flex-start', sm: 'auto' },
         }}>
-          <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: COLORS.success }} />
-          <Typography sx={{ color: COLORS.success, fontFamily: '"DM Mono", monospace', fontSize: '0.7rem' }}>
-            Sistema activo
-          </Typography>
+          <CompanyFilterSelect sx={{ minWidth: 180 }} />
+          <Box sx={{
+            display: 'flex', alignItems: 'center', gap: 0.75,
+            bgcolor: alpha(COLORS.success, 0.1),
+            border: `1px solid ${alpha(COLORS.success, 0.2)}`,
+            px: 1.5, py: 0.6, borderRadius: 10,
+          }}>
+            <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: COLORS.success }} />
+            <Typography sx={{ color: COLORS.success, fontFamily: '"DM Mono", monospace', fontSize: '0.7rem' }}>
+              Sistema activo
+            </Typography>
+          </Box>
         </Box>
       </Box>
 
