@@ -16,6 +16,7 @@ from app.models.employee import DocumentType, Employee
 from app.models.payroll import Payroll, PayrollStatus, PayrollType
 from app.models.settlement import Settlement
 from app.models.vacation_usage import VacationUsage
+from app.services.company_scope import employee_matches_company, normalize_company_filter
 
 SIPE_HEADERS = [
     "Tipo De Documento",
@@ -141,11 +142,19 @@ def _empty_row(emp: Employee) -> SipeRow:
     )
 
 
-async def build_sipe_rows(db: AsyncSession, year: int, month: int) -> list[SipeRow]:
+async def build_sipe_rows(
+    db: AsyncSession,
+    year: int,
+    month: int,
+    company_code: str | None = None,
+) -> list[SipeRow]:
     start, end = _month_bounds(year, month)
     by_id: dict[int, SipeRow] = {}
+    company_filter = normalize_company_filter(company_code)
 
-    def row_for(emp: Employee) -> SipeRow:
+    def row_for(emp: Employee) -> SipeRow | None:
+        if not employee_matches_company(emp, company_filter):
+            return None
         if emp.id not in by_id:
             by_id[emp.id] = _empty_row(emp)
         return by_id[emp.id]
@@ -164,6 +173,8 @@ async def build_sipe_rows(db: AsyncSession, year: int, month: int) -> list[SipeR
         if not emp:
             continue
         r = row_for(emp)
+        if r is None:
+            continue
         if payroll.payroll_type == PayrollType.decimo:
             r.decimo += _d(payroll.gross_salary)
         else:
@@ -179,7 +190,6 @@ async def build_sipe_rows(db: AsyncSession, year: int, month: int) -> list[SipeR
             r.gasto_representacion += _zero_if_missing(
                 getattr(payroll, "representation_expense", None)
             )
-            # Columnas sin campo en el sistema → 0 vía _zero_if_missing(None)
             r.isr_gasto_representacion += _zero_if_missing(
                 getattr(payroll, "representation_income_tax", None)
             )
@@ -202,7 +212,10 @@ async def build_sipe_rows(db: AsyncSession, year: int, month: int) -> list[SipeR
         emp = usage.employee
         if not emp:
             continue
-        row_for(emp).vacaciones += _d(usage.amount)
+        r = row_for(emp)
+        if r is None:
+            continue
+        r.vacaciones += _d(usage.amount)
 
     set_q = (
         select(Settlement)
@@ -214,6 +227,8 @@ async def build_sipe_rows(db: AsyncSession, year: int, month: int) -> list[SipeR
         if not emp:
             continue
         r = row_for(emp)
+        if r is None:
+            continue
         r.vacaciones += _d(settlement.vacation_amount)
         r.decimo += _d(settlement.decimo_amount)
         r.preaviso += _d(settlement.employer_notice_amount)

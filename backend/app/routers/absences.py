@@ -26,6 +26,10 @@ from app.services.vacation import (
     compute_vacation_end_date,
     compute_vacation_payment,
 )
+from app.services.company_scope import (
+    apply_employee_company_filter,
+    assert_company_filter_valid,
+)
 
 router = APIRouter()
 
@@ -86,10 +90,15 @@ async def list_absences(
     status: Optional[AbsenceStatus] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
+    company_code: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    query = select(Absence).options(selectinload(Absence.employee))
+    await assert_company_filter_valid(db, company_code)
+    query = select(Absence).options(selectinload(Absence.employee)).join(
+        Employee, Absence.employee_id == Employee.id
+    )
+    query = apply_employee_company_filter(query, company_code)
     if employee_id:
         query = query.where(Absence.employee_id == employee_id)
     if absence_type:
@@ -104,7 +113,7 @@ async def list_absences(
     result = await db.execute(
         query.order_by(Absence.start_date.desc()).offset(skip).limit(limit)
     )
-    return [_to_response(a) for a in result.scalars().all()]
+    return [_to_response(a) for a in result.scalars().unique().all()]
 
 
 @router.post("/", response_model=AbsenceResponse, status_code=201)

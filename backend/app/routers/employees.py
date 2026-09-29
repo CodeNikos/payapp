@@ -10,6 +10,7 @@ from app.models.company import Company, CompanyStatus
 from app.models.user import User
 from app.schemas.employee import EmployeeCreate, EmployeeUpdate, EmployeeResponse
 from app.services.vacation import compute_vacation_balance_cutoff
+from app.services.company_scope import apply_employee_company_filter, assert_company_filter_valid
 
 router = APIRouter()
 
@@ -37,12 +38,15 @@ async def list_employees(
     search: Optional[str] = None,
     department: Optional[str] = None,
     include_inactive: bool = Query(False),
+    company_code: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await assert_company_filter_valid(db, company_code)
     query = select(Employee)
     if not include_inactive:
         query = query.where(Employee.is_active == True)
+    query = apply_employee_company_filter(query, company_code)
     if search:
         query = query.where(
             (Employee.first_name.ilike(f"%{search}%")) |

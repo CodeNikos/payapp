@@ -18,6 +18,10 @@ from app.schemas.timesheet import (
     TimesheetValidationResult,
 )
 from app.services.labor_hours import validate_timesheet_completeness
+from app.services.company_scope import (
+    assert_company_filter_valid,
+    employee_matches_company,
+)
 
 router = APIRouter()
 
@@ -37,9 +41,17 @@ async def list_timesheets(
     employee_id: int = Query(...),
     year: int = Query(..., ge=2000, le=2100),
     month: int = Query(..., ge=1, le=12),
+    company_code: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await assert_company_filter_valid(db, company_code)
+    if company_code:
+        emp_result = await db.execute(select(Employee).where(Employee.id == employee_id))
+        employee = emp_result.scalar_one_or_none()
+        if not employee or not employee_matches_company(employee, company_code):
+            raise HTTPException(status_code=404, detail="Empleado no encontrado")
+
     period_start = date(year, month, 1)
     last_day = calendar.monthrange(year, month)[1]
     period_end = date(year, month, last_day)
@@ -105,15 +117,20 @@ async def validate_timesheets(
     employee_id: int = Query(...),
     period_start: date = Query(...),
     period_end: date = Query(...),
+    company_code: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     if period_end < period_start:
         raise HTTPException(status_code=400, detail="Período inválido")
 
+    await assert_company_filter_valid(db, company_code)
+
     emp_result = await db.execute(select(Employee).where(Employee.id == employee_id))
     employee = emp_result.scalar_one_or_none()
     if not employee:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    if company_code and not employee_matches_company(employee, company_code):
         raise HTTPException(status_code=404, detail="Empleado no encontrado")
 
     if employee.is_trusted_staff:

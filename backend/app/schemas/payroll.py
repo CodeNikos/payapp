@@ -36,6 +36,7 @@ class PayrollCreate(BaseModel):
     cuatrimestre: Optional[int] = Field(default=None, ge=1, le=3)
     cuatrimestre_year: Optional[int] = Field(default=None, ge=2000, le=2100)
     payment_date: Optional[date] = None
+    company_code: Optional[str] = None
 
     @model_validator(mode="after")
     def validate_period(self):
@@ -111,6 +112,7 @@ class DecimoPreviewRequest(BaseModel):
     year: int = Field(ge=2000, le=2100)
     cuatrimestre: int = Field(ge=1, le=3)
     employee_ids: Optional[List[int]] = None
+    company_code: Optional[str] = None
 
 
 class DecimoPreviewItem(BaseModel):

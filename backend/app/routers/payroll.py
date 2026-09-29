@@ -56,6 +56,17 @@ from app.services.recurring_deductions import (
 
 )
 
+from app.services.company_scope import (
+
+    apply_employee_company_filter,
+
+    assert_company_filter_valid,
+
+    employee_matches_company,
+
+)
+
+
 import json
 
 from app.services.labor_hours import (
@@ -597,13 +608,19 @@ async def list_payrolls(
 
     payroll_type: Optional[PayrollType] = None,
 
+    company_code: Optional[str] = Query(None),
+
     db: AsyncSession = Depends(get_db),
 
     current_user: User = Depends(get_current_user),
 
 ):
 
-    query = select(Payroll)
+    await assert_company_filter_valid(db, company_code)
+
+    query = select(Payroll).join(Employee, Payroll.employee_id == Employee.id)
+
+    query = apply_employee_company_filter(query, company_code)
 
     if employee_id:
 
@@ -617,9 +634,13 @@ async def list_payrolls(
 
         query = query.where(Payroll.payroll_type == payroll_type)
 
-    result = await db.execute(query.offset(skip).limit(limit).order_by(Payroll.created_at.desc()))
+    result = await db.execute(
 
-    return [PayrollResponse.model_validate(p) for p in result.scalars().all()]
+        query.offset(skip).limit(limit).order_by(Payroll.created_at.desc())
+
+    )
+
+    return [PayrollResponse.model_validate(p) for p in result.scalars().unique().all()]
 
 
 
@@ -649,6 +670,10 @@ async def preview_decimo(
             & (Employee.termination_date <= period_end)
         )
     )
+
+    await assert_company_filter_valid(db, data.company_code)
+
+    emp_query = apply_employee_company_filter(emp_query, data.company_code)
 
     if data.employee_ids:
 
@@ -749,6 +774,20 @@ async def create_payroll(
     if data.payroll_type == PayrollType.regular and not employee.is_active:
 
         raise HTTPException(status_code=400, detail="El empleado no está activo")
+
+    if data.company_code:
+
+        await assert_company_filter_valid(db, data.company_code)
+
+        if not employee_matches_company(employee, data.company_code):
+
+            raise HTTPException(
+
+                status_code=400,
+
+                detail="El empleado no pertenece a la empresa seleccionada",
+
+            )
 
 
 

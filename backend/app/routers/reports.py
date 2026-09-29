@@ -30,6 +30,10 @@ from app.services.vacation import (
     compute_vacation_payment,
 )
 from app.services.sipe_report import build_sipe_rows, rows_to_workbook_bytes, sipe_filename
+from app.services.company_scope import (
+    apply_employee_company_filter,
+    assert_company_filter_valid,
+)
 
 router = APIRouter()
 
@@ -51,14 +55,17 @@ async def vacation_taken_report(
     employee_id: Optional[int] = None,
     from_date: Optional[date] = Query(None, alias="from"),
     to_date: Optional[date] = Query(None, alias="to"),
+    company_code: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await assert_company_filter_valid(db, company_code)
     query = (
         select(VacationUsage, Employee)
         .join(Employee, VacationUsage.employee_id == Employee.id)
         .order_by(VacationUsage.start_date.desc(), Employee.last_name, Employee.first_name)
     )
+    query = apply_employee_company_filter(query, company_code)
     if employee_id:
         query = query.where(VacationUsage.employee_id == employee_id)
     if from_date:
@@ -117,12 +124,16 @@ def _build_report_item(employee: Employee, usages: list[VacationUsage], as_of: d
 @router.get("/vacations", response_model=VacationReportResponse)
 async def vacation_report(
     as_of: Optional[date] = None,
+    company_code: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await assert_company_filter_valid(db, company_code)
     as_of_date = as_of or date.today()
+    query = select(Employee).where(Employee.is_active == True)
+    query = apply_employee_company_filter(query, company_code)
     result = await db.execute(
-        select(Employee).where(Employee.is_active == True).order_by(Employee.last_name, Employee.first_name)
+        query.order_by(Employee.last_name, Employee.first_name)
     )
     employees = list(result.scalars().all())
 
@@ -314,10 +325,12 @@ def _sipe_rows_to_response(year: int, month: int, rows) -> SipeReportPreviewResp
 async def sipe_preview(
     year: int = Query(..., ge=2000, le=2100),
     month: int = Query(..., ge=1, le=12),
+    company_code: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    rows = await build_sipe_rows(db, year, month)
+    await assert_company_filter_valid(db, company_code)
+    rows = await build_sipe_rows(db, year, month, company_code=company_code)
     return _sipe_rows_to_response(year, month, rows)
 
 
@@ -325,10 +338,12 @@ async def sipe_preview(
 async def sipe_download(
     year: int = Query(..., ge=2000, le=2100),
     month: int = Query(..., ge=1, le=12),
+    company_code: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    rows = await build_sipe_rows(db, year, month)
+    await assert_company_filter_valid(db, company_code)
+    rows = await build_sipe_rows(db, year, month, company_code=company_code)
     content = rows_to_workbook_bytes(rows)
     filename = sipe_filename(year, month)
     return StreamingResponse(
