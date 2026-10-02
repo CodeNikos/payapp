@@ -52,10 +52,20 @@ api.interceptors.response.use(
 // Extracts a displayable string from FastAPI errors (string detail or 422 array)
 export function getApiError(e, fallback = 'Error desconocido') {
   const detail = e.response?.data?.detail
-  if (!detail) return fallback
-  if (Array.isArray(detail)) {
-    return detail.map(d => (d.msg || '').replace(/^Value error,\s*/i, '')).join(' · ')
+  if (!detail) {
+    if (e.code === 'ECONNABORTED') return 'La solicitud tardó demasiado. Intenta de nuevo.'
+    if (e.message === 'Network Error') return 'No se pudo conectar con el servidor.'
+    return fallback
   }
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    return detail.map((d) => {
+      const loc = Array.isArray(d.loc) ? d.loc.filter((x) => x !== 'body').join('.') : ''
+      const msg = String(d.msg || d.message || '').replace(/^Value error,\s*/i, '')
+      return loc ? `${loc}: ${msg}` : msg
+    }).filter(Boolean).join(' · ') || fallback
+  }
+  if (typeof detail === 'object' && detail.message) return String(detail.message)
   return String(detail)
 }
 
@@ -73,6 +83,17 @@ export const employeesApi = {
   create: (data) => api.post('/employees/', data),
   update: (id, data) => api.patch(`/employees/${id}`, data),
   deactivate: (id) => api.delete(`/employees/${id}`),
+  downloadImportTemplate: () => api.get('/employees/import-template', { responseType: 'blob' }),
+  importCsv: (file, params) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post('/employees/import-csv', formData, {
+      // Dejar que el navegador ponga multipart + boundary
+      headers: { 'Content-Type': undefined },
+      params,
+      timeout: 60000,
+    })
+  },
   previewSettlement: (id, data) => api.post(`/employees/${id}/settlement/preview`, data),
   createSettlement: (id, data) => api.post(`/employees/${id}/settlement`, data),
   listSettlements: (id) => api.get(`/employees/${id}/settlements`),
@@ -90,6 +111,13 @@ export const companiesApi = {
   get: (id) => api.get(`/companies/${id}`),
   create: (data) => api.post('/companies/', data),
   update: (id, data) => api.patch(`/companies/${id}`, data),
+}
+
+export const departmentsApi = {
+  list: (params) => api.get('/departments/', { params }),
+  create: (data) => api.post('/departments/', data),
+  update: (id, data) => api.patch(`/departments/${id}`, data),
+  deactivate: (id) => api.delete(`/departments/${id}`),
 }
 
 export const absencesApi = {

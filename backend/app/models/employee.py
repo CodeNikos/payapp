@@ -25,13 +25,16 @@ class DocumentType(str, enum.Enum):
 
 
 SATURDAY_HALF_DAY_HOURS = Decimal("4")
+DEFAULT_SATURDAY_CLOCK_IN = "08:00"
+DEFAULT_SATURDAY_CLOCK_OUT = "12:00"
 
 
 def effective_weekly_hours(employee: "Employee") -> Decimal:
     """Horas semanales de contrato + sábado medio día si aplica."""
     weekly = employee.weekly_contract_hours or Decimal("40")
     if employee.works_saturday_half_day:
-        weekly += SATURDAY_HALF_DAY_HOURS
+        sat = employee.saturday_hours if employee.saturday_hours is not None else SATURDAY_HALF_DAY_HOURS
+        weekly += sat
     return weekly
 
 
@@ -53,6 +56,9 @@ class Employee(Base):
     base_salary = Column(Numeric(12, 2), nullable=False)
     weekly_contract_hours = Column(Numeric(6, 2), nullable=False, default=40)
     works_saturday_half_day = Column(Boolean, nullable=False, default=False)
+    saturday_hours = Column(Numeric(4, 2), nullable=True, default=4)
+    saturday_clock_in = Column(String(5), nullable=True, default="08:00")
+    saturday_clock_out = Column(String(5), nullable=True, default="12:00")
     is_trusted_staff = Column(Boolean, nullable=False, default=False)
     hire_date = Column(Date, nullable=False)
     termination_date = Column(Date, nullable=True)

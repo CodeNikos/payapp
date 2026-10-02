@@ -10,6 +10,7 @@ from app.models.vacation_usage import VacationUsage
 from app.models.absence import Absence
 from app.models.settlement import Settlement
 from app.models.recurring_deduction import EmployeeRecurringDeduction
+from app.models.department import Department
 
 __all__ = [
     "User",
@@ -22,4 +23,5 @@ __all__ = [
     "Absence",
     "Settlement",
     "EmployeeRecurringDeduction",
+    "Department",
 ]

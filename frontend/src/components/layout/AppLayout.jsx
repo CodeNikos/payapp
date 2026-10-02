@@ -9,7 +9,7 @@ import {
   PersonOutlined, Menu as MenuIcon, LogoutOutlined,
   LockOutlined, ChevronLeft, EventOutlined, ScheduleOutlined, AssessmentOutlined,
   BusinessOutlined, SettingsOutlined, ExpandLess, ExpandMore, EventBusyOutlined,
-  MoneyOffOutlined,
+  MoneyOffOutlined, ApartmentOutlined,
 } from '@mui/icons-material'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import { useAuthStore } from '../../context/authStore'
@@ -32,6 +32,7 @@ const navItems = [
     adminOnly: true,
     children: [
       { label: 'Empresas',      icon: <BusinessOutlined />, path: '/companies' },
+      { label: 'Departamentos', icon: <ApartmentOutlined />, path: '/departments' },
       { label: 'Descuentos',    icon: <MoneyOffOutlined />, path: '/recurring-deductions' },
       { label: 'Días feriados', icon: <EventOutlined />,    path: '/holidays' },
       { label: 'Usuarios',      icon: <PersonOutlined />,   path: '/users' },
@@ -52,7 +53,7 @@ export default function AppLayout() {
   const drawerWidth = collapsed ? DRAWER_COLLAPSED : DRAWER_WIDTH
   const isAdmin = user?.role === 'admin'
 
-  const configPaths = ['/companies', '/holidays', '/users', '/recurring-deductions']
+  const configPaths = ['/companies', '/departments', '/holidays', '/users', '/recurring-deductions']
   const configActive = configPaths.some(p => location.pathname.startsWith(p))
 
   useEffect(() => {

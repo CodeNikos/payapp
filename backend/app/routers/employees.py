@@ -1,16 +1,23 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import List, Optional
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_user, require_role
 from app.models.employee import Employee, EmployeeStatus
 from app.models.company import Company, CompanyStatus
 from app.models.user import User
-from app.schemas.employee import EmployeeCreate, EmployeeUpdate, EmployeeResponse
+from app.schemas.employee import (
+    EmployeeCreate,
+    EmployeeUpdate,
+    EmployeeResponse,
+    EmployeeImportResult,
+)
 from app.services.vacation import compute_vacation_balance_cutoff
 from app.services.company_scope import apply_employee_company_filter, assert_company_filter_valid
+from app.services.employee_import import build_import_template_csv, import_employees_csv
 
 router = APIRouter()
 
@@ -63,6 +70,34 @@ async def list_employees(
         .limit(limit)
     )
     return [EmployeeResponse.model_validate(e) for e in result.scalars().all()]
+
+
+@router.get("/import-template")
+async def download_employee_import_template(
+    current_user: User = Depends(get_current_user),
+):
+    """Plantilla CSV para alta masiva de empleados."""
+    content = "\ufeff" + build_import_template_csv()
+    return Response(
+        content=content.encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="empleados_plantilla.csv"',
+        },
+    )
+
+
+@router.post("/import-csv", response_model=EmployeeImportResult)
+async def import_employees_csv_endpoint(
+    file: UploadFile = File(...),
+    skip_duplicates: bool = Query(True, description="Omitir documentos/correos ya registrados"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="El archivo debe ser .csv")
+    raw_bytes = await file.read()
+    return await import_employees_csv(db, raw_bytes, skip_duplicates=skip_duplicates)
 
 
 @router.post("/", response_model=EmployeeResponse, status_code=201)

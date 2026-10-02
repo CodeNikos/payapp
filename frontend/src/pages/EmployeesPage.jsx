@@ -10,15 +10,15 @@ import AppAlert from '../components/common/AppAlert'
 import {
   AddOutlined, SearchOutlined, PersonOffOutlined, PeopleOutlined, EditOutlined,
   CalculateOutlined, CloudUploadOutlined, BeachAccessOutlined,
+  UploadFileOutlined, DownloadOutlined,
 } from '@mui/icons-material'
-import { employeesApi, companiesApi, reportsApi, getApiError } from '../services/api'
+import { employeesApi, companiesApi, departmentsApi, reportsApi, getApiError } from '../services/api'
 import { COLORS } from '../theme/theme'
 import { alpha } from '@mui/material/styles'
 import CompanyFilterSelect from '../components/common/CompanyFilterSelect'
 import { useCompanyFilterStore } from '../context/companyFilterStore'
 
 const CONTRACT_TYPES = ['indefinido', 'temporal', 'obra_labor']
-const DEPARTMENTS = ['Administración', 'Ventas', 'Operaciones', 'Tecnología', 'RRHH', 'Finanzas', 'Producción']
 const STATUSES = ['activo', 'inactivo', 'suspendido']
 
 const SETTLEMENT_REASONS = [
@@ -47,9 +47,16 @@ const statusColor = {
 
 const SATURDAY_HALF_DAY_HOURS = 4
 
+function saturdayHoursOf(employeeOrForm) {
+  const raw = employeeOrForm?.saturday_hours
+  const n = parseFloat(raw)
+  if (Number.isFinite(n) && n > 0) return n
+  return SATURDAY_HALF_DAY_HOURS
+}
+
 function effectiveWeeklyHours(employeeOrForm) {
   const weekly = parseFloat(employeeOrForm?.weekly_contract_hours ?? 40)
-  return weekly + (employeeOrForm?.works_saturday_half_day ? SATURDAY_HALF_DAY_HOURS : 0)
+  return weekly + (employeeOrForm?.works_saturday_half_day ? saturdayHoursOf(employeeOrForm) : 0)
 }
 
 const emptyForm = {
@@ -57,6 +64,9 @@ const emptyForm = {
   social_security_number: '', email: '', phone: '',
   position: '', department: '', base_salary: '', weekly_contract_hours: '40',
   works_saturday_half_day: false,
+  saturday_hours: String(SATURDAY_HALF_DAY_HOURS),
+  saturday_clock_in: '08:00',
+  saturday_clock_out: '12:00',
   is_trusted_staff: false,
   hire_date: '', contract_type: 'indefinido', status: 'activo', termination_date: '',
   vacation_opening_balance: '0',
@@ -103,6 +113,9 @@ function employeeToForm(emp) {
     base_salary: String(emp.base_salary ?? ''),
     weekly_contract_hours: String(emp.weekly_contract_hours ?? 40),
     works_saturday_half_day: Boolean(emp.works_saturday_half_day),
+    saturday_hours: String(emp.saturday_hours ?? SATURDAY_HALF_DAY_HOURS),
+    saturday_clock_in: emp.saturday_clock_in || '08:00',
+    saturday_clock_out: emp.saturday_clock_out || '12:00',
     is_trusted_staff: Boolean(emp.is_trusted_staff),
     hire_date: emp.hire_date ?? '',
     contract_type: emp.contract_type ?? 'indefinido',
@@ -127,6 +140,11 @@ function buildPayload(form) {
     base_salary: parseFloat(form.base_salary),
     weekly_contract_hours: parseFloat(form.weekly_contract_hours),
     works_saturday_half_day: Boolean(form.works_saturday_half_day),
+    saturday_hours: form.works_saturday_half_day
+      ? (parseFloat(form.saturday_hours) || SATURDAY_HALF_DAY_HOURS)
+      : null,
+    saturday_clock_in: form.works_saturday_half_day ? (form.saturday_clock_in || null) : null,
+    saturday_clock_out: form.works_saturday_half_day ? (form.saturday_clock_out || null) : null,
     is_trusted_staff: Boolean(form.is_trusted_staff),
     hire_date: form.hire_date,
     contract_type: form.contract_type,
@@ -137,7 +155,14 @@ function buildPayload(form) {
   }
 }
 
-function EmployeeFormFields({ form, field, editing, companies = [] }) {
+function EmployeeFormFields({ form, field, editing, companies = [], departments = [] }) {
+  const deptOptions = (() => {
+    const names = departments.map((d) => d.name)
+    if (form.department && !names.includes(form.department)) {
+      return [...departments, { id: `legacy-${form.department}`, name: form.department, is_active: false }]
+    }
+    return departments
+  })()
   return (
     <Grid container spacing={2} sx={{ mt: 0.5 }}>
       {editing && (
@@ -215,39 +240,65 @@ function EmployeeFormFields({ form, field, editing, companies = [] }) {
           helperText={`Lun–vie · Total efectivo: ${effectiveWeeklyHours(form)} h/sem`}
         />
       </Grid>
-      <Grid item xs={12} sm={6} sx={{ display: 'flex', alignItems: 'flex-start', pt: { xs: 0, sm: 1 } }}>
-        <Box sx={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 1,
-          mt: { xs: 0, sm: 2.5 },
-          px: 1.25,
-          py: 0.75,
-          minHeight: 40,
-          borderRadius: 1.5,
-          border: `1px solid ${form.works_saturday_half_day ? alpha(COLORS.brand, 0.35) : COLORS.borderSubtle}`,
-          bgcolor: form.works_saturday_half_day ? COLORS.brandMuted : COLORS.inputBg,
-        }}>
-          <Typography sx={{ fontSize: '0.8125rem', color: COLORS.textPrimary, lineHeight: 1.35 }}>
-            Sábado medio día
-            <Typography component="span" sx={{ display: 'block', fontSize: '0.68rem', color: COLORS.textMuted }}>
-              +{SATURDAY_HALF_DAY_HOURS} h/semana
-            </Typography>
-          </Typography>
-          <Switch
-            size="small"
-            checked={form.works_saturday_half_day}
-            onChange={e => field('works_saturday_half_day', e.target.checked)}
-            sx={{
-              m: 0,
-              '& .MuiSwitch-switchBase.Mui-checked': { color: COLORS.brand },
-              '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: alpha(COLORS.brand, 0.55) },
-            }}
-          />
-        </Box>
+      <Grid item xs={12} sm={6}>
+        <TextField
+          fullWidth
+          label="Sábado medio día (horas)"
+          type="text"
+          inputMode="decimal"
+          value={form.works_saturday_half_day ? (form.saturday_hours ?? '') : ''}
+          onChange={(e) => {
+            const raw = e.target.value.replace(',', '.')
+            // Permitir vacío, enteros y decimales mientras escribe
+            if (raw !== '' && !/^\d*\.?\d*$/.test(raw)) return
+            if (raw === '' || raw === '.') {
+              field('works_saturday_half_day', false)
+              field('saturday_hours', '')
+              return
+            }
+            field('saturday_hours', raw)
+            const n = parseFloat(raw)
+            const on = Number.isFinite(n) && n > 0
+            field('works_saturday_half_day', on)
+            if (on) {
+              if (!form.saturday_clock_in) field('saturday_clock_in', '08:00')
+              if (!form.saturday_clock_out) field('saturday_clock_out', '12:00')
+            }
+          }}
+          placeholder="Ej. 4"
+          helperText={
+            form.works_saturday_half_day
+              ? `Suma ${saturdayHoursOf(form)} h · Total efectivo: ${effectiveWeeklyHours(form)} h/sem`
+              : 'Vacío = no trabaja sábado · Indica horas (ej. 4)'
+          }
+        />
       </Grid>
+      {form.works_saturday_half_day && (
+        <>
+          <Grid item xs={6} sm={3}>
+            <TextField
+              fullWidth
+              label="Entrada sábado"
+              type="time"
+              value={form.saturday_clock_in || ''}
+              onChange={(e) => field('saturday_clock_in', e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              inputProps={{ step: 60 }}
+            />
+          </Grid>
+          <Grid item xs={6} sm={3}>
+            <TextField
+              fullWidth
+              label="Salida sábado"
+              type="time"
+              value={form.saturday_clock_out || ''}
+              onChange={(e) => field('saturday_clock_out', e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              inputProps={{ step: 60 }}
+            />
+          </Grid>
+        </>
+      )}
       <Grid item xs={12} sm={6} sx={{ display: 'flex', alignItems: 'flex-start' }}>
         <Box sx={{
           width: '100%',
@@ -299,7 +350,14 @@ function EmployeeFormFields({ form, field, editing, companies = [] }) {
       )}
       <Grid item xs={6}>
         <TextField fullWidth select label="Departamento" value={form.department} onChange={e => field('department', e.target.value)}>
-          {DEPARTMENTS.map(d => <MenuItem key={d} value={d}>{d}</MenuItem>)}
+          <MenuItem value="" disabled>
+            {deptOptions.length ? 'Seleccionar…' : 'Sin departamentos — créalos en Configuración'}
+          </MenuItem>
+          {deptOptions.map(d => (
+            <MenuItem key={d.id || d.name} value={d.name}>
+              {d.name}{d.is_active === false ? ' (inactivo)' : ''}
+            </MenuItem>
+          ))}
         </TextField>
       </Grid>
       <Grid item xs={6}>
@@ -365,6 +423,7 @@ function SettlementLine({ label, value, muted, emphasize }) {
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState([])
   const [companies, setCompanies] = useState([])
+  const [departments, setDepartments] = useState([])
   const [loading, setLoading]     = useState(true)
   const [search, setSearch]       = useState('')
   const [openForm, setOpenForm]   = useState(false)
@@ -390,6 +449,13 @@ export default function EmployeesPage() {
   const [vacationError, setVacationError] = useState('')
   const [vacationSuccess, setVacationSuccess] = useState('')
 
+  const [openImport, setOpenImport] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importError, setImportError] = useState('')
+  const [importResult, setImportResult] = useState(null)
+  const [selectedFile, setSelectedFile] = useState(null)
+  const [importSuccess, setImportSuccess] = useState('')
+
   const companyCode = useCompanyFilterStore((s) => s.selectedCompanyCode)
   const companyQuery = useCompanyFilterStore((s) => s.companyQueryParam)
 
@@ -402,7 +468,7 @@ export default function EmployeesPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [empRes, companyRes] = await Promise.all([
+      const [empRes, companyRes, deptRes] = await Promise.all([
         employeesApi.list({
           search: search || undefined,
           limit: 200,
@@ -410,9 +476,11 @@ export default function EmployeesPage() {
           company_code: companyQuery(),
         }),
         companiesApi.list({ limit: 200 }),
+        departmentsApi.list({ include_inactive: true, limit: 200 }),
       ])
       setEmployees(empRes.data)
       setCompanies(companyRes.data)
+      setDepartments(Array.isArray(deptRes.data) ? deptRes.data.filter((d) => d.is_active) : [])
     } catch { /* ignore */ }
     finally { setLoading(false) }
   }, [search, companyCode])
@@ -424,6 +492,92 @@ export default function EmployeesPage() {
     setForm(emptyForm)
     setError('')
     setOpenForm(true)
+  }
+
+  const handleOpenImport = () => {
+    setImportError('')
+    setImportResult(null)
+    setSelectedFile(null)
+    setOpenImport(true)
+  }
+
+  const handleCloseImport = () => {
+    if (importing) return
+    setOpenImport(false)
+    setImportError('')
+    setImportResult(null)
+    setSelectedFile(null)
+  }
+
+  const handleFileChange = (event) => {
+    const file = event.target.files?.[0]
+    setSelectedFile(file ?? null)
+    setImportError('')
+    setImportResult(null)
+    event.target.value = ''
+  }
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await employeesApi.downloadImportTemplate()
+      const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'empleados_plantilla.csv'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (e) {
+      setImportError(getApiError(e, 'Error al descargar la plantilla'))
+    }
+  }
+
+  const handleImport = async () => {
+    if (!selectedFile) {
+      setImportError('Selecciona un archivo CSV')
+      return
+    }
+    if (!selectedFile.name.toLowerCase().endsWith('.csv')) {
+      setImportError('El archivo debe tener extensión .csv')
+      return
+    }
+
+    setImporting(true)
+    setImportError('')
+    setImportResult(null)
+    setImportSuccess('')
+    try {
+      const res = await employeesApi.importCsv(selectedFile, { skip_duplicates: true })
+      const result = res.data || { created: 0, skipped: 0, errors: [] }
+      setImportResult(result)
+
+      const errCount = result.errors?.length || 0
+      if (result.created > 0) {
+        setImportSuccess(
+          `${result.created} empleado${result.created !== 1 ? 's' : ''} importado${result.created !== 1 ? 's' : ''}`
+          + (result.skipped ? ` · ${result.skipped} omitido${result.skipped !== 1 ? 's' : ''} (duplicados)` : '')
+          + (errCount ? ` · ${errCount} con error` : ''),
+        )
+        load()
+      } else if (errCount > 0) {
+        setImportError(
+          `No se importó ningún empleado. Revisa los ${errCount} error${errCount !== 1 ? 'es' : ''} por fila abajo.`,
+        )
+      } else if (result.skipped > 0) {
+        setImportError(
+          `Ninguno creado: ${result.skipped} fila${result.skipped !== 1 ? 's' : ''} omitida${result.skipped !== 1 ? 's' : ''} porque el documento o correo ya existe.`,
+        )
+      } else {
+        setImportError('No se encontraron filas de datos válidas en el CSV. Revisa la plantilla y los encabezados.')
+      }
+    } catch (e) {
+      setImportResult(null)
+      setImportError(getApiError(e, 'Error al importar el archivo'))
+    } finally {
+      setImporting(false)
+    }
   }
 
   const handleOpenEdit = (emp) => {
@@ -686,11 +840,19 @@ export default function EmployeesPage() {
             )}
           </Typography>
         </Box>
-        <Button variant="contained" startIcon={<AddOutlined />} onClick={handleOpenCreate} size="small">
-          Nuevo empleado
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Button variant="outlined" startIcon={<UploadFileOutlined />} onClick={handleOpenImport} size="small">
+            Importar CSV
+          </Button>
+          <Button variant="contained" startIcon={<AddOutlined />} onClick={handleOpenCreate} size="small">
+            Nuevo empleado
+          </Button>
+        </Box>
       </Box>
 
+      {importSuccess && (
+        <AppAlert severity="success" variant="banner" onClose={() => setImportSuccess('')}>{importSuccess}</AppAlert>
+      )}
       {settlementSuccess && !settlementTarget && (
         <AppAlert severity="success" variant="banner" onClose={() => setSettlementSuccess('')}>{settlementSuccess}</AppAlert>
       )}
@@ -756,7 +918,11 @@ export default function EmployeesPage() {
                 <TableCell sx={{ fontFamily: '"DM Mono", monospace', fontSize: '0.8rem', color: COLORS.textSecondary }}>
                   {effectiveWeeklyHours(emp).toLocaleString('es-PA', { maximumFractionDigits: 1 })}
                   {emp.works_saturday_half_day && (
-                    <Chip label="Sáb ½" size="small" sx={{ ml: 0.75, height: 18, fontSize: '0.62rem' }} />
+                    <Chip
+                      label={`Sáb ${saturdayHoursOf(emp)}h`}
+                      size="small"
+                      sx={{ ml: 0.75, height: 18, fontSize: '0.62rem' }}
+                    />
                   )}
                 </TableCell>
                 <TableCell>
@@ -806,13 +972,100 @@ export default function EmployeesPage() {
         </Table>
       </TableContainer>
 
+      <Dialog open={openImport} onClose={handleCloseImport} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 1 } }}>
+        <DialogTitle sx={{ fontFamily: '"Syne", sans-serif', pb: 1 }}>
+          Importar empleados CSV
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ color: COLORS.textSecondary, mb: 2 }}>
+            Usa la plantilla con las columnas requeridas. Los documentos o correos duplicados se omiten.
+            Si falla, verás el motivo por fila (documento, salario, fecha, empresa, etc.).
+            Solo administradores pueden importar.
+          </Typography>
+          {importError && (
+            <AppAlert severity="error" sx={{ mb: 2 }}>{importError}</AppAlert>
+          )}
+          {importResult && (
+            <Box sx={{ mb: 2 }}>
+              <AppAlert
+                severity={
+                  importResult.created > 0
+                    ? (importResult.errors?.length ? 'warning' : 'success')
+                    : (importResult.errors?.length ? 'error' : 'warning')
+                }
+                sx={{ mb: 1 }}
+              >
+                Creados: {importResult.created} · Omitidos: {importResult.skipped}
+                {importResult.errors?.length ? ` · Errores: ${importResult.errors.length}` : ''}
+              </AppAlert>
+              {importResult.errors?.length > 0 && (
+                <Box sx={{
+                  maxHeight: 220,
+                  overflow: 'auto',
+                  border: `1px solid ${COLORS.borderSubtle}`,
+                  borderRadius: 1,
+                  p: 1.5,
+                  bgcolor: alpha(COLORS.error, 0.04),
+                }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, mb: 1, fontSize: '0.8rem' }}>
+                    Detalle por fila
+                  </Typography>
+                  {importResult.errors.map((err, i) => (
+                    <Typography key={`${err.row}-${i}`} variant="body2" sx={{ fontSize: '0.78rem', mb: 0.75, color: COLORS.textPrimary }}>
+                      <Box component="span" sx={{ fontFamily: '"DM Mono", monospace', color: COLORS.error, mr: 0.75 }}>
+                        Fila {err.row}
+                      </Box>
+                      {err.message}
+                    </Typography>
+                  ))}
+                </Box>
+              )}
+            </Box>
+          )}
+          <Box sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 1.5,
+            alignItems: 'center',
+            p: 2,
+            borderRadius: 1,
+            border: `1px dashed ${COLORS.borderSubtle}`,
+            bgcolor: alpha(COLORS.brand, 0.02),
+          }}>
+            <Button component="label" variant="outlined" startIcon={<UploadFileOutlined />} disabled={importing}>
+              {selectedFile ? 'Cambiar archivo' : 'Seleccionar CSV'}
+              <input type="file" accept=".csv,text/csv" hidden onChange={handleFileChange} />
+            </Button>
+            <Typography variant="body2" sx={{ color: COLORS.textSecondary, flex: 1, wordBreak: 'break-all' }}>
+              {selectedFile ? selectedFile.name : 'Ningún archivo seleccionado'}
+            </Typography>
+            <Button size="small" startIcon={<DownloadOutlined />} onClick={handleDownloadTemplate} sx={{ color: COLORS.brand }}>
+              Plantilla
+            </Button>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button onClick={handleCloseImport} disabled={importing} sx={{ color: COLORS.textSecondary }}>
+            Cerrar
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleImport}
+            disabled={importing || !selectedFile}
+            startIcon={importing ? null : <UploadFileOutlined />}
+          >
+            {importing ? <CircularProgress size={18} sx={{ color: COLORS.white }} /> : 'Importar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Dialog open={openForm} onClose={handleCloseForm} maxWidth="sm" fullWidth scroll="body" PaperProps={{ sx: { borderRadius: 1 } }}>
         <DialogTitle sx={{ fontFamily: '"Syne", sans-serif', pb: 1 }}>
           {editing ? 'Editar empleado' : 'Nuevo empleado'}
         </DialogTitle>
         <DialogContent>
           {error && <AppAlert severity="error">{error}</AppAlert>}
-          <EmployeeFormFields form={form} field={field} editing={editing} companies={companyOptions} />
+          <EmployeeFormFields form={form} field={field} editing={editing} companies={companyOptions} departments={departments} />
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 3, borderTop: `1px solid ${COLORS.borderSubtle}`, pt: 2 }}>
           <Button onClick={handleCloseForm} disabled={saving} sx={{ color: COLORS.textSecondary }}>

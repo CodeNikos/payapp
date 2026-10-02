@@ -418,3 +418,83 @@ async def run_migrations():
             "CREATE INDEX IF NOT EXISTS ix_employee_recurring_deductions_is_active "
             "ON employee_recurring_deductions (is_active)"
         ))
+
+        # Horas y horario configurables del sábado
+        await conn.execute(text(
+            "ALTER TABLE employees "
+            "ADD COLUMN IF NOT EXISTS saturday_hours NUMERIC(4, 2)"
+        ))
+        await conn.execute(text(
+            "UPDATE employees SET saturday_hours = 4 "
+            "WHERE saturday_hours IS NULL AND works_saturday_half_day = TRUE"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE employees ALTER COLUMN saturday_hours SET DEFAULT 4"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE employees "
+            "ADD COLUMN IF NOT EXISTS saturday_clock_in VARCHAR(5)"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE employees "
+            "ADD COLUMN IF NOT EXISTS saturday_clock_out VARCHAR(5)"
+        ))
+        await conn.execute(text(
+            "UPDATE employees SET saturday_clock_in = '08:00' "
+            "WHERE saturday_clock_in IS NULL AND works_saturday_half_day = TRUE"
+        ))
+        await conn.execute(text(
+            "UPDATE employees SET saturday_clock_out = '12:00' "
+            "WHERE saturday_clock_out IS NULL AND works_saturday_half_day = TRUE"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE employees ALTER COLUMN saturday_clock_in SET DEFAULT '08:00'"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE employees ALTER COLUMN saturday_clock_out SET DEFAULT '12:00'"
+        ))
+
+        # Catálogo de departamentos
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS departments (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL UNIQUE,
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ
+            )
+        """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_departments_name ON departments (name)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_departments_is_active ON departments (is_active)"
+        ))
+        # Semilla inicial + departamentos ya usados en empleados
+        await conn.execute(text("""
+            INSERT INTO departments (name, is_active)
+            SELECT v.name, TRUE
+            FROM (VALUES
+                ('Administración'),
+                ('Ventas'),
+                ('Operaciones'),
+                ('Tecnología'),
+                ('RRHH'),
+                ('Finanzas'),
+                ('Producción')
+            ) AS v(name)
+            WHERE NOT EXISTS (
+                SELECT 1 FROM departments d WHERE lower(d.name) = lower(v.name)
+            )
+        """))
+        await conn.execute(text("""
+            INSERT INTO departments (name, is_active)
+            SELECT DISTINCT e.department, TRUE
+            FROM employees e
+            WHERE e.department IS NOT NULL
+              AND btrim(e.department) <> ''
+              AND NOT EXISTS (
+                SELECT 1 FROM departments d
+                WHERE lower(d.name) = lower(btrim(e.department))
+              )
+        """))

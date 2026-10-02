@@ -12,7 +12,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
 import app.models  # noqa: F401 — registra todos los modelos antes de montar routers
-from app.routers import auth, users, employees, payroll, holidays, timesheets, reports, companies, absences, settlements, recurring_deductions
+from app.routers import auth, users, employees, payroll, holidays, timesheets, reports, companies, absences, settlements, recurring_deductions, departments
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 from app.core.database import run_migrations, create_tables
@@ -60,6 +60,7 @@ app.include_router(users.router, prefix="/api/v1/users", tags=["Usuarios"])
 app.include_router(employees.router, prefix="/api/v1/employees", tags=["Empleados"])
 app.include_router(settlements.router, prefix="/api/v1/employees", tags=["Liquidaciones"])
 app.include_router(companies.router, prefix="/api/v1/companies", tags=["Empresas"])
+app.include_router(departments.router, prefix="/api/v1/departments", tags=["Departamentos"])
 app.include_router(absences.router, prefix="/api/v1/absences", tags=["Ausencias"])
 app.include_router(payroll.router, prefix="/api/v1/payroll", tags=["Nómina"])
 app.include_router(holidays.router, prefix="/api/v1/holidays", tags=["Días feriados"])

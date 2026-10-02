@@ -41,9 +41,9 @@ const SCHEDULE_PRESETS = [
   },
   {
     id: 'saturday_half',
-    label: 'Medio día 8:00–13:00',
+    label: 'Medio día 8:00–12:00',
     clock_in: '08:00',
-    clock_out: '13:00',
+    clock_out: '12:00',
     overtime_start: '',
     overtime_end: '',
   },
@@ -133,10 +133,24 @@ function weekRangeLabel(week) {
   return `${days[0].dayNum} – ${days[days.length - 1].dayNum}`
 }
 
-function WeekQuickFill({ week, worksSaturdayHalfDay, onApply }) {
+function WeekQuickFill({ week, worksSaturdayHalfDay, saturdaySchedule, onApply }) {
   const [template, setTemplate] = useState(DEFAULT_WEEK_TEMPLATE)
   const [selectedDays, setSelectedDays] = useState(() => defaultSelectedDays(worksSaturdayHalfDay))
   const [presetKey, setPresetKey] = useState('')
+
+  const presets = useMemo(() => {
+    const satIn = saturdaySchedule?.clock_in || '08:00'
+    const satOut = saturdaySchedule?.clock_out || '12:00'
+    return SCHEDULE_PRESETS.map((p) => {
+      if (p.id !== 'saturday_half') return p
+      return {
+        ...p,
+        clock_in: satIn,
+        clock_out: satOut,
+        label: `Medio día ${satIn}–${satOut}`,
+      }
+    })
+  }, [saturdaySchedule])
 
   useEffect(() => {
     setSelectedDays(defaultSelectedDays(worksSaturdayHalfDay))
@@ -145,7 +159,7 @@ function WeekQuickFill({ week, worksSaturdayHalfDay, onApply }) {
   const setField = (key, value) => setTemplate(prev => ({ ...prev, [key]: value }))
 
   const handlePreset = (presetId) => {
-    const preset = SCHEDULE_PRESETS.find(p => p.id === presetId)
+    const preset = presets.find(p => p.id === presetId)
     if (!preset) return
     setPresetKey(presetId)
     setTemplate({
@@ -195,13 +209,13 @@ function WeekQuickFill({ week, worksSaturdayHalfDay, onApply }) {
           sx={{ minWidth: 200, '& .MuiInputBase-root': { fontSize: '0.8rem' } }}
           SelectProps={{
             displayEmpty: true,
-            renderValue: (v) => SCHEDULE_PRESETS.find(p => p.id === v)?.label ?? 'Elegir plantilla…',
+            renderValue: (v) => presets.find(p => p.id === v)?.label ?? 'Elegir plantilla…',
           }}
         >
           <MenuItem value="" sx={{ fontSize: '0.85rem', color: COLORS.textMuted }}>
             Elegir plantilla…
           </MenuItem>
-          {SCHEDULE_PRESETS.map(p => (
+          {presets.map(p => (
             <MenuItem key={p.id} value={p.id} sx={{ fontSize: '0.85rem' }}>{p.label}</MenuItem>
           ))}
         </TextField>
@@ -285,7 +299,7 @@ function WeekQuickFill({ week, worksSaturdayHalfDay, onApply }) {
   )
 }
 
-function WeekTimesheetGrid({ week, monthName, grid, setGrid, worksSaturdayHalfDay }) {
+function WeekTimesheetGrid({ week, monthName, grid, setGrid, worksSaturdayHalfDay, saturdaySchedule }) {
   const setCell = (date, key, value) => {
     setGrid(prev => ({
       ...prev,
@@ -317,6 +331,7 @@ function WeekTimesheetGrid({ week, monthName, grid, setGrid, worksSaturdayHalfDa
       <WeekQuickFill
         week={week}
         worksSaturdayHalfDay={worksSaturdayHalfDay}
+        saturdaySchedule={saturdaySchedule}
         onApply={applyWeekSchedule}
       />
       <Table size="small" sx={{ minWidth: 720, tableLayout: 'fixed' }}>
@@ -606,6 +621,10 @@ export default function TimesheetsPage() {
             grid={grid}
             setGrid={setGrid}
             worksSaturdayHalfDay={Boolean(selectedEmployee?.works_saturday_half_day)}
+            saturdaySchedule={{
+              clock_in: selectedEmployee?.saturday_clock_in || '08:00',
+              clock_out: selectedEmployee?.saturday_clock_out || '12:00',
+            }}
           />
         ))
       )}
